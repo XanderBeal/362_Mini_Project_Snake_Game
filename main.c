@@ -16,7 +16,7 @@ void enable_ports(void) {
     GPIOC->PUPDR |= 0x55;
 }
 
-//OLED Components
+//TFT Components
 void init_spi1();
 void spi_cmd(unsigned int data);
 void spi_data(unsigned int data);
