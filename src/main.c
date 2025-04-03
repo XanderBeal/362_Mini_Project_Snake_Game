@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include <lcd.h>
+
 void set_char_msg(int, char);
 void nano_wait(unsigned int);
 void game(void);
@@ -68,6 +70,9 @@ uint8_t col;
 
 //TFT lcd 2.2 inch spi display
 void lcd_test(void);
+void UI_Setup(u16 Color);
+void game_logic_loop(void);
+void game_setup(void);
 
 // TRRS Audio Jack Components
 // TODO: Add TRRS audio jack setup code
@@ -77,11 +82,52 @@ void lcd_test(void);
 
 
 
+//240 (horiz) x 320 (vert) pixel resolution
+
 void lcd_test(void){
-    //LCD_Init();
-    //LCD_Setup();
+    //lcd setup
+    LCD_Setup();
+    LCD_Clear(BLACK);
+
+    //initial UI setup
+    UI_Setup(YELLOW);
+
+    //loading picture / screen
+    //LCD_DrawPicture();
+
+    game_setup();
+
+    game_logic_loop();
 
 
+}
+
+void UI_Setup(u16 Color){
+    //setup game boundry
+    LCD_DrawRectangle(10, 10, 230, 310, Color); //x1, y1, x2, y2, color
+    LCD_DrawRectangle(20, 20, 220, 300, Color); //x1, y1, x2, y2, color
+
+}
+
+void game_setup(){
+    //snake starting position and food starting position
+
+}
+
+//Example logic: 
+//  https://www.youtube.com/watch?v=JcvyrU2A8r4&ab_channel=TFTSTM32
+//  Website:    https://vivonomicon.com/2018/06/17/drawing-to-a-small-tft-display-the-ili9341-and-stm32/
+//  Phils lab:  https://www.youtube.com/watch?v=RWujOLXBFrc&ab_channel=Phil%E2%80%99sLab
+
+void game_logic_loop(){
+
+    //snake position update
+        //keep in mind boundry
+
+    //score update
+
+    //display update
+        //current position / score / win / lose condition
 
 }
 
