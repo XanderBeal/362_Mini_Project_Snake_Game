@@ -293,7 +293,7 @@ void set_status_color(GameStatus status) {
 
 void place_apple(void);
 void LCD_DrawString(u16 x, u16 y, u16 fc, u16 bg, const char *p, u8 size, u8 mode);
-
+void LCD_FillRect(u16 x, u16 y, u16 w, u16 h, u16 color);
 
 
 typedef struct {
@@ -309,6 +309,24 @@ Point apple = {10, 10};
 
 int just_ate_apple = 0;
 int snake_dead = 0;
+
+void draw_cell(int x, int y, u16 color) {
+    LCD_FillRect(
+        ORIGIN_X + x * CELL_SIZE,
+        ORIGIN_Y + y * CELL_SIZE,
+        CELL_SIZE - 1,
+        CELL_SIZE - 1,
+        color
+    );
+}
+
+void clear_board() {
+    for (int x = 0; x < BOARD_WIDTH; x++) {
+        for (int y = 0; y < BOARD_HEIGHT; y++) {
+            draw_cell(x, y, BG_COLOR);
+        }
+    }
+}
 
 void update_display() {
     // Clear board first (or just update old segments if optimized later)
@@ -351,24 +369,6 @@ void update_score() {
         score = 0;
         msg[5] = font['0'];
         msg[6] = font['0'];
-    }
-}
-
-void draw_cell(int x, int y, u16 color) {
-    LCD_FillRect(
-        ORIGIN_X + x * CELL_SIZE,
-        ORIGIN_Y + y * CELL_SIZE,
-        CELL_SIZE - 1,
-        CELL_SIZE - 1,
-        color
-    );
-}
-
-void clear_board() {
-    for (int x = 0; x < BOARD_WIDTH; x++) {
-        for (int y = 0; y < BOARD_HEIGHT; y++) {
-            draw_cell(x, y, BG_COLOR);
-        }
     }
 }
 
