@@ -101,25 +101,6 @@ void print(const char str[]);
 
 int score = 0;
 
-void update_score() {
-    if (just_ate_apple) {
-        score++;
-
-        int tens = (score / 10) % 10;
-        int ones = score % 10;
-
-        msg[5] = font['0' + tens];
-        msg[6] = font['0' + ones];
-    }
-
-    if (snake_dead) {
-        score = 0;
-        msg[5] = font['0'];
-        msg[6] = font['0'];
-    }
-}
-
-
 // Keypad Components
 void init_tim7(void);
 void TIM7_IRQHandler(void);
@@ -303,6 +284,16 @@ void set_status_color(GameStatus status) {
 #define DIR_RIGHT 1
 #define DIR_DOWN 2
 #define DIR_LEFT 3
+#define CELL_SIZE 10
+#define ORIGIN_X 20
+#define ORIGIN_Y 20
+#define SNAKE_COLOR GREEN
+#define APPLE_COLOR RED
+#define BG_COLOR BLACK
+
+void place_apple(void);
+void LCD_DrawString(u16 x, u16 y, u16 fc, u16 bg, const char *p, u8 size, u8 mode);
+
 
 
 typedef struct {
@@ -345,16 +336,23 @@ void update_display() {
     
 }
 
-#define CELL_SIZE 10
-#define ORIGIN_X 20
-#define ORIGIN_Y 20
-#define SNAKE_COLOR GREEN
-#define APPLE_COLOR RED
-#define BG_COLOR BLACK
+void update_score() {
+    if (just_ate_apple) {
+        score++;
 
-void place_apple(void);
-void LCD_DrawString(u16 x, u16 y, u16 fc, u16 bg, const char *p, u8 size, u8 mode);
+        int tens = (score / 10) % 10;
+        int ones = score % 10;
 
+        msg[5] = font['0' + tens];
+        msg[6] = font['0' + ones];
+    }
+
+    if (snake_dead) {
+        score = 0;
+        msg[5] = font['0'];
+        msg[6] = font['0'];
+    }
+}
 
 void draw_cell(int x, int y, u16 color) {
     LCD_FillRect(
