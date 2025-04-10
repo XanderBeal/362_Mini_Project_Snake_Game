@@ -5,6 +5,7 @@
 #include <stdlib.h>
 
 #include <lcd.h>
+#include <spi_setup.h>
 
 void set_char_msg(int, char);
 void nano_wait(unsigned int);
@@ -64,15 +65,6 @@ void setup_tim1() { // Might want to switch to TIM14 or TIM 3 to trigger faster
 }
 
 
-//TFT Components
-void init_spi1();
-void spi_cmd(unsigned int data);
-void spi_data(unsigned int data);
-void spi1_init_oled();
-void spi1_display1(const char *string);
-void spi1_display2(const char *string);
-void spi1_setup_dma(void);
-void spi1_enable_dma(void);
 
 uint16_t display[34] = {
     0x002, // Command to set the cursor at the first position line 1
@@ -82,17 +74,6 @@ uint16_t display[34] = {
     0x200+'Y', 0x200+'O', 0x200+'U', 0x200+' ', 0x200+'C', + 0x200+'A', 0x200+'N', 0x200+' ',
     0x200+'G', 0x200+'U', 0x200+'D', 0x200+' ', + 0x200+'L', 0x200+'U', 0x200+'C', 0x200+'K',
 };
-
-// 7-BIT Score Display Components
-void setup_bb(void);
-void small_delay(void);
-void bb_write_bit(int val);
-void bb_write_halfword(int halfword);
-void drive_bb(void);
-void init_spi2(void);
-void spi2_setup_dma(void);
-void spi2_enable_dma(void);
-void init_tim15(void);
 
 int msg_index = 0;
 uint16_t msg[8] = { 0x0000,0x0100,0x0200,0x0300,0x0400,0x0500,0x0600,0x0700 };
