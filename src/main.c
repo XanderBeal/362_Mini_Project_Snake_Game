@@ -6,6 +6,8 @@
 
 #include <lcd.h>
 #include <spi_setup.h>
+#include "lcd.h"
+
 
 void set_char_msg(int, char);
 void nano_wait(unsigned int);
@@ -144,7 +146,7 @@ void play_tone(int freq, int duration_ms) {
     TIM14->CCR1 = arr / 2;  // 50% duty for square wave
 
     for (int i = 0; i < duration_ms * 1000; i += 100) {
-        nano_wait(100000);
+        nano_wait(1000);
     }
 
     TIM14->CCR1 = 0; // Turn off sound
@@ -157,7 +159,7 @@ void sound_apple_eaten() {
 
 void sound_death() {
     play_tone(300, 200);  // low tone
-    nano_wait(200000);
+    nano_wait(2000);
     play_tone(200, 300);  // even lower tone
 }
 
@@ -274,7 +276,7 @@ void set_status_color(GameStatus status) {
 
 void place_apple(void);
 void LCD_DrawString(u16 x, u16 y, u16 fc, u16 bg, const char *p, u8 size, u8 mode);
-void LCD_FillRect(u16 x, u16 y, u16 w, u16 h, u16 color);
+void LCD_DrawFillRectangle(u16 x, u16 y, u16 w, u16 h, u16 color);
 
 
 typedef struct {
@@ -292,7 +294,7 @@ int just_ate_apple = 0;
 int snake_dead = 0;
 
 void draw_cell(int x, int y, u16 color) {
-    LCD_FillRect(
+    LCD_DrawFillRectangle(
         ORIGIN_X + x * CELL_SIZE,
         ORIGIN_Y + y * CELL_SIZE,
         CELL_SIZE - 1,
@@ -390,14 +392,25 @@ void update_snake() {
         }
         just_ate_apple = 1;
         sound_apple_eaten();  //  Play sound
-        apple.x = rand() % BOARD_WIDTH;
-        apple.y = rand() % BOARD_HEIGHT;
+        srand(TIM14->CNT);
+    apple.x = random() % BOARD_WIDTH;
+
+    srand(TIM14->CNT);
+    apple.y = random() % BOARD_HEIGHT;
+
+
     }
 }
 
 void place_apple() {
-    apple.x = rand() % BOARD_WIDTH;
-    apple.y = rand() % BOARD_HEIGHT;
+    srand(TIM14->CNT);
+    apple.x = random() % BOARD_WIDTH;
+
+
+    srand(TIM14->CNT);
+    apple.y = random() % BOARD_HEIGHT;
+
+
 }
 
 
@@ -422,7 +435,7 @@ void game_logic_loop() {
     while (1) {
         update_snake();
         update_score();
-        drive_bb();  //updating the display
+        //drive_bb();  //updating the display
 
         if (snake_dead) {
             sound_death();  //Death sound
@@ -446,7 +459,7 @@ void game_logic_loop() {
         }
 
 
-        nano_wait(10000000);  // Adjust delay for game speed
+        nano_wait(1000);  // Adjust delay for game speed
     }
 }
 
@@ -465,6 +478,18 @@ void game_logic_loop() {
 // Main function
 int main(void) {
     internal_clock();
+    init_spi1();
+    LCD_Setup();
+
+    //while (1) {
+     //   GPIOB->ODR &= ~(1 << 8); // CS LOW
+       // LCD_WriteData16(0xAAAA);
+       // GPIOB->ODR |= (1 << 8);  // CS HIGH
+
+        //nano_wait(1000);
+    
+    
+    
 
     msg[0] |= font['S'];
     msg[1] |= font['C'];

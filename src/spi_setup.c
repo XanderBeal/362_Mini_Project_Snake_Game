@@ -8,40 +8,64 @@
 #include <spi_setup.h>
 
 
-int msg_index = 0;
-uint16_t msg[8] = { 0x0000,0x0100,0x0200,0x0300,0x0400,0x0500,0x0600,0x0700 };
+//int msg_index = 0;
+//uint16_t msg[8] = { 0x0000,0x0100,0x0200,0x0300,0x0400,0x0500,0x0600,0x0700 };
 extern const char font[];
 
 
 uint8_t col; // the column being scanned
 
+extern int msg_index;
+extern uint16_t msg[8];
+extern uint16_t display[34];
 
-uint16_t display[34] = {
-    0x002, // Command to set the cursor at the first position line 1
-    0x200+'E', 0x200+'C', 0x200+'E', 0x200+'3', 0x200+'6', + 0x200+'2', 0x200+' ', 0x200+'i',
-    0x200+'s', 0x200+' ', 0x200+'t', 0x200+'h', + 0x200+'e', 0x200+' ', 0x200+' ', 0x200+' ',
-    0x0c0, // Command to set the cursor at the first position line 2
-    0x200+'c', 0x200+'l', 0x200+'a', 0x200+'s', 0x200+'s', + 0x200+' ', 0x200+'f', 0x200+'o',
-    0x200+'r', 0x200+' ', 0x200+'y', 0x200+'o', + 0x200+'u', 0x200+'!', 0x200+' ', 0x200+' ',
-};
+#define CS_BIT (1 << 8)  // PB8 is the Chip Select pin
 
 
-void init_spi1() {
-    //disable spi1
-    SPI1->CR1 &= ~SPI_CR1_SPE;
-    //clocks
-    RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
+//uint16_t display[34] = {
+  //  0x002, // Command to set the cursor at the first position line 1
+    //0x200+'E', 0x200+'C', 0x200+'E', 0x200+'3', 0x200+'6', + 0x200+'2', 0x200+' ', 0x200+'i',
+    //0x200+'s', 0x200+' ', 0x200+'t', 0x200+'h', + 0x200+'e', 0x200+' ', 0x200+' ', 0x200+' ',
+    //0x0c0, // Command to set the cursor at the first position line 2
+    //0x200+'c', 0x200+'l', 0x200+'a', 0x200+'s', 0x200+'s', + 0x200+' ', 0x200+'f', 0x200+'o',
+    //0x200+'r', 0x200+' ', 0x200+'y', 0x200+'o', + 0x200+'u', 0x200+'!', 0x200+' ', 0x200+' ',//
+//};
+
+
+void init_spi1(void) {
+    RCC->AHBENR |= RCC_AHBENR_GPIOAEN | RCC_AHBENR_GPIOBEN;
     RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
-    //spi1 gpio config
-    GPIOA->MODER &= ~(GPIO_MODER_MODER5 | GPIO_MODER_MODER7 | GPIO_MODER_MODER15);
-    GPIOA->MODER |= (GPIO_MODER_MODER5_1 | GPIO_MODER_MODER7_1 | GPIO_MODER_MODER15_1);
-    //spi1 config
-    SPI1->CR1 = SPI_CR1_MSTR | SPI_CR1_BR_1;
-    //10bit
-    SPI1->CR2 = SPI_CR2_DS_3 | SPI_CR2_DS_0 | SPI_CR2_NSSP;
-    //enable
-    SPI1->CR1 |= SPI_CR1_SPE;
+
+    // GPIOA5 = SCK, GPIOA7 = MOSI, GPIOA6 = MISO (optional), GPIOA15 = NSS (optional)
+    GPIOA->MODER &= ~(3<<(5*2) | 3<<(7*2));
+    GPIOA->MODER |=  (2<<(5*2) | 2<<(7*2)); // AF mode
+    GPIOA->AFR[0] |= (0 << (5*4)) | (0 << (7*4)); // AF0 for SPI1
+
+    // CS = PB8 (manual)
+    GPIOB->MODER &= ~(3 << (8*2));
+    GPIOB->MODER |=  (1 << (8*2));
+    GPIOB->ODR |= (1 << 8); // CS high
+
+    // DC = PB14 (output)
+    GPIOB->MODER &= ~(3 << (14*2));
+    GPIOB->MODER |=  (1 << (14*2));
+
+    // RESET = PB11 (output)
+    GPIOB->MODER &= ~(3 << (11*2));
+    GPIOB->MODER |=  (1 << (11*2));
+
+    SPI1->CR1 = 0;
+    SPI1->CR1 |= SPI_CR1_MSTR     // Master mode
+              |  SPI_CR1_BR_1     // Baud rate = fPCLK/8 (safe for most displays)
+              |  SPI_CR1_SSI
+              |  SPI_CR1_SSM
+              |  SPI_CR1_SPE;     // Enable SPI
+
+    SPI1->CR2 = SPI_CR2_DS_3 | SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0; // 16-bit mode
 }
+
+
+
 
 void spi_cmd(unsigned int data) {
     while (!(SPI1->SR & SPI_SR_TXE));
@@ -53,12 +77,12 @@ void spi_data(unsigned int data) {
 }
 
 void spi1_init_oled() {
-    nano_wait(1000000); 
+    nano_wait(1000); 
 
     spi_cmd(0x38);  
     spi_cmd(0x08);
     spi_cmd(0x01); 
-    nano_wait(2000000);
+    nano_wait(2000);
 
     spi_cmd(0x06);
     spi_cmd(0x02);

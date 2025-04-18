@@ -3,6 +3,10 @@
 // lcd.c: Adapted from the lcdwiki.com examples.
 //============================================================================
 
+//============================================================================
+// lcd.c: Adapted from the lcdwiki.com examples.
+//============================================================================
+
 #include "stm32f0xx.h"
 #include <stdio.h>
 #include <stdint.h>
@@ -14,8 +18,7 @@ lcd_dev_t lcddev;
 
 #define SPI SPI1
 
-#define CS_NUM  8
-#define CS_BIT  (1<<CS_NUM)
+#define CS_BIT  (1<<8)
 #define CS_HIGH do { GPIOB->BSRR = GPIO_BSRR_BS_8; } while(0)
 #define CS_LOW do { GPIOB->BSRR = GPIO_BSRR_BR_8; } while(0)
 #define RESET_NUM 11
@@ -26,23 +29,21 @@ lcd_dev_t lcddev;
 #define DC_BIT (1<<DC_NUM)
 #define DC_HIGH do { GPIOB->BSRR = GPIO_BSRR_BS_14; } while(0)
 #define DC_LOW  do { GPIOB->BSRR = GPIO_BSRR_BR_14; } while(0)
+#define DC_COMMAND() (GPIOB->ODR &= ~(1 << 9))
+#define DC_DATA()    (GPIOB->ODR |= (1 << 9))
 
 // Set the CS pin low if val is non-zero.
 // Note that when CS is being set high again, wait on SPI to not be busy.
 static void tft_select(int val)
 {
     if (val == 0) {
-        while(SPI1->SR & SPI_SR_BSY);
+        while (SPI1->SR & SPI_SR_BSY);
         CS_HIGH;
     } else {
-        while((GPIOB->ODR & (CS_BIT)) == 0) {
-            ; // If CS is already low, this is an error.  Loop forever.
-            // This has happened because something called a drawing subroutine
-            // while one was already in process.  For instance, the main()
-            // subroutine could call a long-running LCD_DrawABC function,
-            // and an ISR interrupts it and calls another LCD_DrawXYZ function.
-            // This is a common mistake made by students.
-            // This is what catches the problem early.
+        int timeout = 10000;
+        while ((GPIOB->ODR & CS_BIT) == 0 && --timeout > 0);
+        if (timeout <= 0) {
+            CS_HIGH;
         }
         CS_LOW;
     }
@@ -58,22 +59,81 @@ static void tft_reset(int val)
     }
 }
 
-// If
+// If val is 1, select register; if 0, select data.
 static void tft_reg_select(int val)
 {
-    if (val == 1) { // select registers
-        DC_LOW; // clear
-    } else { // select data
-        DC_HIGH; // set
+    if (val == 1) {
+        DC_LOW;
+    } else {
+        DC_HIGH;
     }
 }
+// Prepare to write 16-bit data to the LCD
+//void LCD_WriteData16_Prepare()
+//{
+  //  lcddev.reg_select(0);
+    //SPI->CR2 |= SPI_CR2_DS;
+//}
+void LCD_WriteCommand(uint16_t cmd) {
+    DC_COMMAND();
+    GPIOB->ODR &= ~(1 << 8); // CS LOW
+
+    while (!(SPI1->SR & SPI_SR_TXE));
+    SPI1->DR = cmd;
+    while (SPI1->SR & SPI_SR_BSY);
+
+    GPIOB->ODR |= (1 << 8);  // CS HIGH
+}
+
+void LCD_WriteData16(uint16_t data) {
+    // DC = data mode, CS LOW
+    GPIOB->ODR |= (1 << 14);      // DC
+    GPIOB->ODR &= ~(1 << 8);      // CS LOW
+
+    // Wait until TXE is ready
+    while (!(SPI1->SR & SPI_SR_TXE));
+    SPI1->DR = data;
+
+    // 🟢 This part is important to finish transmission
+    while (SPI1->SR & SPI_SR_BSY); // Wait until not busy
+
+    // 🧹 Clear RXNE if necessary (read to clear flags)
+    volatile uint16_t dummy = SPI1->DR;
+    (void)dummy;  // Prevent compiler warning
+
+
+    // CS HIGH
+    GPIOB->ODR |= (1 << 8);       // CS HIGH
+}
+
+
+
+
+
+    /*if (val == 0) {
+        while(SPI1->SR & SPI_SR_BSY);
+        CS_HIGH;
+    } else {
+        while((GPIOB->ODR & (CS_BIT)) == 0) {
+            ; // If CS is already low, this is an error.  Loop forever.
+            // This has happened because something called a drawing subroutine
+            // while one was already in process.  For instance, the main()
+            // subroutine could call a long-running LCD_DrawABC function,
+            // and an ISR interrupts it and calls another LCD_DrawXYZ function.
+            // This is a common mistake made by students.
+            // This is what catches the problem early.
+        }
+        CS_LOW;
+    }*/
+
+// If val is non-zero, set nRESET low to reset the display.
 
 void LCD_Reset(void)
 {
     lcddev.reset(1);      // Assert reset
-    nano_wait(100000000); // Wait
+    nano_wait(1000); // Wait
     lcddev.reset(0);      // De-assert reset
-    nano_wait(50000000);  // Wait
+    nano_wait(5000);  // Wait
 }
 
 // If you want to try the slower version of SPI, #define SLOW_SPI
@@ -158,19 +218,6 @@ void LCD_WR_DATA(uint8_t data)
     *((volatile uint8_t*)&SPI->DR) = data;
 }
 
-// Prepare to write 16-bit data to the LCD
-void LCD_WriteData16_Prepare()
-{
-    lcddev.reg_select(0);
-    SPI->CR2 |= SPI_CR2_DS;
-}
-
-// Write 16-bit data
-void LCD_WriteData16(u16 data)
-{
-    while((SPI->SR & SPI_SR_TXE) == 0);
-    SPI->DR = data;
-}
 
 // Finish writing 16-bit data
 void LCD_WriteData16_End()
@@ -329,7 +376,7 @@ void LCD_Init(void (*reset)(int), void (*select)(int), void (*reg_select)(int))
     LCD_WR_DATA(0x00);
     LCD_WR_DATA(0xef);
     LCD_WR_REG(0x11);     // Exit Sleep
-    nano_wait(120000000); // Wait 120 ms
+    nano_wait(1200); // Wait 120 ms
     LCD_WR_REG(0x29);     // Display on
 
     LCD_direction(USE_HORIZONTAL);
@@ -378,7 +425,7 @@ void LCD_Clear(u16 Color)
     lcddev.select(1);
     unsigned int i,m;
     LCD_SetWindow(0,0,lcddev.width-1,lcddev.height-1);
-    LCD_WriteData16_Prepare();
+    //LCD_WriteData16_Prepare();
     for(i=0;i<lcddev.height;i++)
     {
         for(m=0;m<lcddev.width;m++)
@@ -396,7 +443,7 @@ void LCD_Clear(u16 Color)
 static void _LCD_DrawPoint(u16 x, u16 y, u16 c)
 {
     LCD_SetWindow(x,y,x,y);
-    LCD_WriteData16_Prepare();
+    //LCD_WriteData16_Prepare();
     LCD_WriteData16(c);
     LCD_WriteData16_End();
 }
@@ -472,18 +519,26 @@ void LCD_DrawRectangle(u16 x1, u16 y1, u16 x2, u16 y2, u16 c)
 //===========================================================================
 static void _LCD_Fill(u16 sx,u16 sy,u16 ex,u16 ey,u16 color)
 {
-    u16 i,j;
-    u16 width=ex-sx+1;
-    u16 height=ey-sy+1;
-    LCD_SetWindow(sx,sy,ex,ey);
-    LCD_WriteData16_Prepare();
-    for(i=0;i<height;i++)
-    {
-        for(j=0;j<width;j++)
-        LCD_WriteData16(color);
+    u16 width = ex - sx + 1;
+    u16 height = ey - sy + 1;
+    uint32_t total_pixels = width * height;
+
+    LCD_SetWindow(sx, sy, ex, ey);
+   // LCD_WriteData16_Prepare();
+
+    for (uint32_t i = 0; i < total_pixels; i++) {
+        int timeout = 10000;
+        while ((SPI1->SR & SPI_SR_TXE) == 0 && --timeout > 0);
+        if (timeout == 0) {
+            // Timeout occurred, recover or skip to avoid lock
+            continue;
+        }
+        SPI1->DR = color;
     }
+    
     LCD_WriteData16_End();
 }
+
 
 //===========================================================================
 // Draw a filled rectangle of lines of color c from (x1,y1) to (x2,y2).
@@ -870,7 +925,7 @@ void _LCD_DrawChar(u16 x,u16 y,u16 fc, u16 bc, char num, u8 size, u8 mode)
     num=num-' ';
     LCD_SetWindow(x,y,x+size/2-1,y+size-1);
     if (!mode) {
-        LCD_WriteData16_Prepare();
+        //LCD_WriteData16_Prepare();
         for(pos=0;pos<size;pos++) {
             if (size==12)
                 temp=asc2_1206[(int)num][pos];
@@ -949,7 +1004,7 @@ void LCD_DrawPicture(u16 x0, u16 y0, const Picture *pic)
     while (y1 >= lcddev.height)
         ;
     LCD_SetWindow(x0,y0,x1,y1);
-    LCD_WriteData16_Prepare();
+   // LCD_WriteData16_Prepare();
 
     u16 *data = (u16 *)pic->pixel_data;
     for(int y=0; y<pic->height; y++) {
