@@ -305,6 +305,17 @@ void setrgb(uint32_t rgbval) {
 
 
 //240 (horiz) x 320 (vert) pixel resolution
+void UI_Setup(u16 Color) {
+    // Target: a centered game area ~160×200 inside 240×320 screen
+
+    // Outer boundary
+    LCD_DrawRectangle(40, 60, 200, 260, Color);  // (x1, y1) to (x2, y2)
+
+    // Inner boundary (nested inside)
+    LCD_DrawRectangle(45, 65, 195, 255, Color);  // 5-pixel margin inside
+}
+
+
 
 void lcd_test(void){
     //lcd setup
@@ -312,7 +323,7 @@ void lcd_test(void){
     LCD_Clear(BLACK);
 
     //initial UI setup
-    UI_Setup(YELLOW);
+    UI_Setup(WHITE);
 
     //loading picture / screen
    // LCD_DrawPicture();
@@ -324,12 +335,6 @@ void lcd_test(void){
 
 }
 
-void UI_Setup(u16 Color){
-    //setup game boundry
-    LCD_DrawRectangle(10, 10, 230, 310, Color); //x1, y1, x2, y2, color
-    LCD_DrawRectangle(20, 20, 220, 300, Color); //x1, y1, x2, y2, color
-
-}
 
 void game_setup(){
     //snake starting position and food starting position
@@ -612,12 +617,41 @@ void spi2_enable_dma(void);
 void game_logic_loop(void);
 void init_lcd_spi(void);
 
+void lcd_hello_world_test(void) {
+    LCD_Setup();
+    LCD_Clear(BLACK);
+
+    LCD_DrawString(20, 100, YELLOW, BLACK, "HELLO", 16, 0);
+    LCD_DrawString(20, 120, YELLOW, BLACK, "WORLD!", 16, 0);
+}
+
+void lcd_color_test(void) {
+    LCD_Setup();
+
+    LCD_Clear(RED);
+    nano_wait(1000000);
+
+    LCD_Clear(GREEN);
+    nano_wait(1000000);
+
+    LCD_Clear(BLUE);
+    nano_wait(1000000);
+
+    LCD_Clear(WHITE);
+}
 
 
 
 
 int main(void) {
-    
+
+    internal_clock();
+    //lcd_hello_world_test();  // <-- Run test
+    lcd_color_test();
+    while (1) {
+        // halt here
+    }
+   /* 
     internal_clock();
 
     //keypad
@@ -641,12 +675,9 @@ int main(void) {
     //init_spi1();
     //setup_tim1();
     LCD_Setup();
-    LCD_Clear(BLACK);
+    LCD_Clear(WHITE);
 
 
-
-    //LCD_Clear(GREEN);
-    lcd_test();
 
     msg[0] |= font['S'];
     msg[1] |= font['C'];
@@ -657,8 +688,7 @@ int main(void) {
     msg[6] |= font['0'];
     msg[7] |= font[' '];
 
-    //LCD_Setup();
-    //LCD_Clear(GRAY);
+    lcd_test();
 
     while (1) {
         GPIOB->ODR &= ~(1 << 8); // CS LOW
@@ -669,6 +699,6 @@ int main(void) {
     
     }
     
-
+*/
   //  game_logic_loop();
 }

@@ -106,8 +106,14 @@ void LCD_WR_DATA(uint8_t data)
 }
 void LCD_WriteData16_Prepare()
 {
-    lcddev.reg_select(0);
-    SPI->CR2 |= SPI_CR2_DS;
+    lcddev.reg_select(0);  // Select data register
+
+    // Force SPI to 16-bit mode
+    SPI1->CR1 &= ~SPI_CR1_SPE;         // Disable SPI to change DS
+    SPI1->CR2 &= ~SPI_CR2_DS;
+    SPI1->CR2 |= (15 << SPI_CR2_DS_Pos); // 16-bit = 0b1111
+    SPI1->CR1 |= SPI_CR1_SPE;          // Re-enable SPI
+
 }
 void LCD_WriteData16(u16 data)
 {
@@ -116,7 +122,9 @@ void LCD_WriteData16(u16 data)
 }
 void LCD_WriteData16_End()
 {
-    SPI->CR2 &= ~SPI_CR2_DS; // bad value forces it back to 8-bit mode
+    SPI1->CR2 &= ~SPI_CR2_DS;
+    SPI1->CR2 |= (7 << SPI_CR2_DS_Pos);   // Revert to 8-bit after pixel write
+
 }
 void LCD_WriteReg(uint8_t LCD_Reg, uint16_t LCD_RegValue)
 {
