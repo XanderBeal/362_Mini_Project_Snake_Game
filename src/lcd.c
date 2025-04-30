@@ -10,15 +10,18 @@
 #include "stm32f0xx.h"
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <time.h>
+#include <math.h>
+#include <stdbool.h>
 #include "lcd.h"
 
 void nano_wait(int t);
-
-lcd_dev_t lcddev;
+void internal_clock();
 
 #define SPI SPI1
-
-#define CS_BIT  (1<<8)
+#define CS_NUM  8
+#define CS_BIT  (1<<CS_NUM)
 #define CS_HIGH do { GPIOB->BSRR = GPIO_BSRR_BS_8; } while(0)
 #define CS_LOW do { GPIOB->BSRR = GPIO_BSRR_BR_8; } while(0)
 #define RESET_NUM 11
@@ -29,26 +32,34 @@ lcd_dev_t lcddev;
 #define DC_BIT (1<<DC_NUM)
 #define DC_HIGH do { GPIOB->BSRR = GPIO_BSRR_BS_14; } while(0)
 #define DC_LOW  do { GPIOB->BSRR = GPIO_BSRR_BR_14; } while(0)
+#define N 1000
+#define RATE 20000
+
 #define DC_COMMAND() (GPIOB->ODR &= ~(1 << 9))
 #define DC_DATA()    (GPIOB->ODR |= (1 << 9))
 
 // Set the CS pin low if val is non-zero.
 // Note that when CS is being set high again, wait on SPI to not be busy.
+
+lcd_dev_t lcddev;
 static void tft_select(int val)
 {
     if (val == 0) {
-        while (SPI1->SR & SPI_SR_BSY);
+        while(SPI->SR & SPI_SR_BSY);
         CS_HIGH;
     } else {
-        int timeout = 10000;
-        while ((GPIOB->ODR & CS_BIT) == 0 && --timeout > 0);
-        if (timeout <= 0) {
-            CS_HIGH;
+        while((GPIOB->ODR & (CS_BIT)) == 0) {
+            ; // If CS is already low, this is an error.  Loop forever.
+            // This has happened because something called a drawing subroutine
+            // while one was already in process.  For instance, the main()
+            // subroutine could call a long-running LCD_DrawABC function,
+            // and an ISR interrupts it and calls another LCD_DrawXYZ function.
+            // This is a common mistake made by students.
+            // This is what catches the problem early.
         }
         CS_LOW;
     }
 }
-
 // If val is non-zero, set nRESET low to reset the display.
 static void tft_reset(int val)
 {
@@ -62,18 +73,61 @@ static void tft_reset(int val)
 // If val is 1, select register; if 0, select data.
 static void tft_reg_select(int val)
 {
-    if (val == 1) {
-        DC_LOW;
-    } else {
-        DC_HIGH;
+    if (val == 1) { // select registers
+        DC_LOW; // clear
+    } else { // select data
+        DC_HIGH; // set
     }
 }
-// Prepare to write 16-bit data to the LCD
-//void LCD_WriteData16_Prepare()
-//{
-  //  lcddev.reg_select(0);
-    //SPI->CR2 |= SPI_CR2_DS;
-//}
+
+
+void LCD_Reset(void)
+{
+    lcddev.reset(1);      // Assert reset
+    nano_wait(100000); // Wait
+    lcddev.reset(0);      // De-assert reset
+    nano_wait(50000);  // Wait
+}
+void LCD_WR_REG(uint8_t data)
+{
+    while((SPI->SR & SPI_SR_BSY) != 0)
+        ;
+    // Don't clear RS until the previous operation is done.
+    lcddev.reg_select(1);
+    *((volatile uint8_t*)&SPI->DR) = data;
+}
+void LCD_WR_DATA(uint8_t data)
+{
+    while((SPI->SR & SPI_SR_BSY) != 0)
+        ;
+    // Don't set RS until the previous operation is done.
+    lcddev.reg_select(0);
+    *((volatile uint8_t*)&SPI->DR) = data;
+}
+void LCD_WriteData16_Prepare()
+{
+    lcddev.reg_select(0);
+    SPI->CR2 |= SPI_CR2_DS;
+}
+void LCD_WriteData16(u16 data)
+{
+    while((SPI1->SR & SPI_SR_TXE) == 0);
+    SPI->DR = data;
+}
+void LCD_WriteData16_End()
+{
+    SPI->CR2 &= ~SPI_CR2_DS; // bad value forces it back to 8-bit mode
+}
+void LCD_WriteReg(uint8_t LCD_Reg, uint16_t LCD_RegValue)
+{
+    LCD_WR_REG(LCD_Reg);
+    LCD_WR_DATA(LCD_RegValue);
+}
+void LCD_WriteRAM_Prepare(void)
+{
+    LCD_WR_REG(lcddev.wramcmd);
+}
+/*
 void LCD_WriteCommand(uint16_t cmd) {
     DC_COMMAND();
     GPIOB->ODR &= ~(1 << 8); // CS LOW
@@ -84,6 +138,8 @@ void LCD_WriteCommand(uint16_t cmd) {
 
     GPIOB->ODR |= (1 << 8);  // CS HIGH
 }
+
+
 
 void LCD_WriteData16(uint16_t data) {
     // DC = data mode, CS LOW
@@ -108,7 +164,7 @@ void LCD_WriteData16(uint16_t data) {
 
 
 
-
+*/
 
     /*if (val == 0) {
         while(SPI1->SR & SPI_SR_BSY);
@@ -126,17 +182,7 @@ void LCD_WriteData16(uint16_t data) {
         CS_LOW;
     }*/
 
-// If val is non-zero, set nRESET low to reset the display.
 
-void LCD_Reset(void)
-{
-    lcddev.reset(1);      // Assert reset
-    nano_wait(1000); // Wait
-    lcddev.reset(0);      // De-assert reset
-    nano_wait(5000);  // Wait
-}
-
-// If you want to try the slower version of SPI, #define SLOW_SPI
 
 #if defined(SLOW_SPI)
 
@@ -198,46 +244,13 @@ void LCD_WriteData16_End()
 
 #else /* not SLOW_SPI */
 
-// Write to an LCD "register"
-void LCD_WR_REG(uint8_t data)
-{
-    while((SPI->SR & SPI_SR_BSY) != 0)
-        ;
-    // Don't clear RS until the previous operation is done.
-    lcddev.reg_select(1);
-    *((volatile uint8_t*)&SPI->DR) = data;
-}
-
-// Write 8-bit data to the LCD
-void LCD_WR_DATA(uint8_t data)
-{
-    while((SPI->SR & SPI_SR_BSY) != 0)
-        ;
-    // Don't set RS until the previous operation is done.
-    lcddev.reg_select(0);
-    *((volatile uint8_t*)&SPI->DR) = data;
-}
 
 
 // Finish writing 16-bit data
-void LCD_WriteData16_End()
-{
-    SPI->CR2 &= ~SPI_CR2_DS; // bad value forces it back to 8-bit mode
-}
+
 #endif /* not SLOW_SPI */
 
 // Select an LCD "register" and write 8-bit data to it.
-void LCD_WriteReg(uint8_t LCD_Reg, uint16_t LCD_RegValue)
-{
-    LCD_WR_REG(LCD_Reg);
-    LCD_WR_DATA(LCD_RegValue);
-}
-
-// Issue the "write RAM" command configured for the display.
-void LCD_WriteRAM_Prepare(void)
-{
-    LCD_WR_REG(lcddev.wramcmd);
-}
 
 // Configure the lcddev fields for the display orientation.
 void LCD_direction(u8 direction)
@@ -269,8 +282,6 @@ void LCD_direction(u8 direction)
     default:break;
     }
 }
-
-// Do the initialization sequence for the display.
 void LCD_Init(void (*reset)(int), void (*select)(int), void (*reg_select)(int))
 {
     lcddev.reset = tft_reset;
@@ -376,30 +387,25 @@ void LCD_Init(void (*reset)(int), void (*select)(int), void (*reg_select)(int))
     LCD_WR_DATA(0x00);
     LCD_WR_DATA(0xef);
     LCD_WR_REG(0x11);     // Exit Sleep
-    nano_wait(1200); // Wait 120 ms
+    nano_wait(120000000); // Wait 120 ms
     LCD_WR_REG(0x29);     // Display on
 
     LCD_direction(USE_HORIZONTAL);
     lcddev.select(0);
 }
 
-__attribute((weak)) void init_lcd_spi(void)
+/*__attribute((weak)) void init_lcd_spi(void)
 {
     printf("init_lcd_spi() not defined.");
 }
-
+*/
 void LCD_Setup() {
-    init_lcd_spi();
+    init_spi1();
     tft_select(0);
     tft_reset(0);
     tft_reg_select(0);
     LCD_Init(tft_reset, tft_select, tft_reg_select);
 }
-
-//===========================================================================
-// Select a subset of the display to work on, and issue the "Write RAM"
-// command to prepare to send pixel data to it.
-//===========================================================================
 void LCD_SetWindow(uint16_t xStart, uint16_t yStart, uint16_t xEnd, uint16_t yEnd)
 {
     LCD_WR_REG(lcddev.setxcmd);
@@ -416,16 +422,12 @@ void LCD_SetWindow(uint16_t xStart, uint16_t yStart, uint16_t xEnd, uint16_t yEn
 
     LCD_WriteRAM_Prepare();
 }
-
-//===========================================================================
-// Set the entire display to one color
-//===========================================================================
 void LCD_Clear(u16 Color)
 {
     lcddev.select(1);
     unsigned int i,m;
     LCD_SetWindow(0,0,lcddev.width-1,lcddev.height-1);
-    //LCD_WriteData16_Prepare();
+    LCD_WriteData16_Prepare();
     for(i=0;i<lcddev.height;i++)
     {
         for(m=0;m<lcddev.width;m++)
@@ -438,16 +440,22 @@ void LCD_Clear(u16 Color)
 }
 
 //===========================================================================
+// Select a subset of the display to work on, and issue the "Write RAM"
+// command to prepare to send pixel data to it.
+//===========================================================================
+//===========================================================================
+// Set the entire display to one color
+//===========================================================================
+//===========================================================================
 // Draw a single dot of color c at (x,y)
 //===========================================================================
 static void _LCD_DrawPoint(u16 x, u16 y, u16 c)
 {
     LCD_SetWindow(x,y,x,y);
-    //LCD_WriteData16_Prepare();
+    LCD_WriteData16_Prepare();
     LCD_WriteData16(c);
     LCD_WriteData16_End();
 }
-
 void LCD_DrawPoint(u16 x, u16 y, u16 c)
 {
     lcddev.select(1);
@@ -518,37 +526,30 @@ void LCD_DrawRectangle(u16 x1, u16 y1, u16 x2, u16 y2, u16 c)
 // Fill a rectangle with color c from (x1,y1) to (x2,y2).
 //===========================================================================
 static void _LCD_Fill(u16 sx,u16 sy,u16 ex,u16 ey,u16 color)
-{
-    u16 width = ex - sx + 1;
-    u16 height = ey - sy + 1;
-    uint32_t total_pixels = width * height;
-
-    LCD_SetWindow(sx, sy, ex, ey);
-   // LCD_WriteData16_Prepare();
-
-    for (uint32_t i = 0; i < total_pixels; i++) {
-        int timeout = 10000;
-        while ((SPI1->SR & SPI_SR_TXE) == 0 && --timeout > 0);
-        if (timeout == 0) {
-            // Timeout occurred, recover or skip to avoid lock
-            continue;
+    {
+        u16 i,j;
+        u16 width=ex-sx+1;
+        u16 height=ey-sy+1;
+        LCD_SetWindow(sx,sy,ex,ey);
+        LCD_WriteData16_Prepare();
+        for(i=0;i<height;i++)
+        {
+            for(j=0;j<width;j++)
+            LCD_WriteData16(color);
         }
-        SPI1->DR = color;
+        LCD_WriteData16_End();
     }
-    
-    LCD_WriteData16_End();
-}
 
 
 //===========================================================================
 // Draw a filled rectangle of lines of color c from (x1,y1) to (x2,y2).
 //===========================================================================
 void LCD_DrawFillRectangle(u16 x1, u16 y1, u16 x2, u16 y2, u16 c)
-{
-    lcddev.select(1);
-    _LCD_Fill(x1,y1,x2,y2,c);
-    lcddev.select(0);
-}
+    {
+        lcddev.select(1);
+        _LCD_Fill(x1,y1,x2,y2,c);
+        lcddev.select(0);
+    }
 
 static void _draw_circle_8(int xc, int yc, int x, int y, u16 c)
 {
@@ -919,51 +920,51 @@ const unsigned char asc2_1608[95][16]={
 // When mode is set, the background will be transparent.
 //===========================================================================
 void _LCD_DrawChar(u16 x,u16 y,u16 fc, u16 bc, char num, u8 size, u8 mode)
-{
-    u8 temp;
-    u8 pos,t;
-    num=num-' ';
-    LCD_SetWindow(x,y,x+size/2-1,y+size-1);
-    if (!mode) {
-        //LCD_WriteData16_Prepare();
-        for(pos=0;pos<size;pos++) {
-            if (size==12)
-                temp=asc2_1206[(int)num][pos];
-            else
-                temp=asc2_1608[(int)num][pos];
-            for (t=0;t<size/2;t++) {
-                if (temp&0x01)
-                    LCD_WriteData16(fc);
+    {
+        u8 temp;
+        u8 pos,t;
+        num=num-' ';
+        LCD_SetWindow(x,y,x+size/2-1,y+size-1);
+        if (!mode) {
+            LCD_WriteData16_Prepare();
+            for(pos=0;pos<size;pos++) {
+                if (size==12)
+                    temp=asc2_1206[(int)num][pos];
                 else
-                    LCD_WriteData16(bc);
-                temp>>=1;
-
+                    temp=asc2_1608[(int)num][pos];
+                for (t=0;t<size/2;t++) {
+                    if (temp&0x01)
+                        LCD_WriteData16(fc);
+                    else
+                        LCD_WriteData16(bc);
+                    temp>>=1;
+    
+                }
             }
-        }
-        LCD_WriteData16_End();
-    } else {
-        for(pos=0;pos<size;pos++)
-        {
-            if (size==12)
-                temp=asc2_1206[(int)num][pos];
-            else
-                temp=asc2_1608[(int)num][pos];
-            for (t=0;t<size/2;t++)
+            LCD_WriteData16_End();
+        } else {
+            for(pos=0;pos<size;pos++)
             {
-                if(temp&0x01)
-                    _LCD_DrawPoint(x+t,y+pos,fc);
-                temp>>=1;
+                if (size==12)
+                    temp=asc2_1206[(int)num][pos];
+                else
+                    temp=asc2_1608[(int)num][pos];
+                for (t=0;t<size/2;t++)
+                {
+                    if(temp&0x01)
+                        _LCD_DrawPoint(x+t,y+pos,fc);
+                    temp>>=1;
+                }
             }
         }
-    }
-}
+    }   
 
-void LCD_DrawChar(u16 x,u16 y,u16 fc, u16 bc, char num, u8 size, u8 mode)
-{
-    lcddev.select(1);
-    _LCD_DrawChar(x,y,fc,bc,num,size,mode);
-    lcddev.select(0);
-}
+    void LCD_DrawChar(u16 x,u16 y,u16 fc, u16 bc, char num, u8 size, u8 mode)
+    {
+        lcddev.select(1);
+        _LCD_DrawChar(x,y,fc,bc,num,size,mode);
+        lcddev.select(0);
+    }    
 
 //===========================================================================
 // Display a string of characters starting at location x,y.
@@ -973,18 +974,18 @@ void LCD_DrawChar(u16 x,u16 y,u16 fc, u16 bc, char num, u8 size, u8 mode)
 // When mode is set, the background will be transparent.
 //===========================================================================
 void LCD_DrawString(u16 x,u16 y, u16 fc, u16 bg, const char *p, u8 size, u8 mode)
-{
-    lcddev.select(1);
-    while((*p<='~')&&(*p>=' '))
     {
-        if(x>(lcddev.width-1)||y>(lcddev.height-1))
-        return;
-        _LCD_DrawChar(x,y,fc,bg,*p,size,mode);
-        x+=size/2;
-        p++;
+        lcddev.select(1);
+        while((*p<='~')&&(*p>=' '))
+        {
+            if(x>(lcddev.width-1)||y>(lcddev.height-1))
+            return;
+            _LCD_DrawChar(x,y,fc,bg,*p,size,mode);
+            x+=size/2;
+            p++;
+        }
+        lcddev.select(0);
     }
-    lcddev.select(0);
-}
 
 //===========================================================================
 // Draw a picture with upper left corner at (x0,y0).

@@ -4,13 +4,6 @@
 #include <stdio.h>
 
 
-void nano_wait(unsigned int n) {
-    while (n-- > 0) {
-        __asm__ volatile ("nop");
-    }
-}
-
-
 
 
 

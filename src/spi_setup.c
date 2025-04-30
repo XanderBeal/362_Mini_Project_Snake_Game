@@ -6,6 +6,7 @@
 
 #include <lcd.h>
 #include <spi_setup.h>
+void nano_wait(unsigned int);
 
 
 //int msg_index = 0;
@@ -20,6 +21,11 @@ extern uint16_t msg[8];
 extern uint16_t display[34];
 
 #define CS_BIT (1 << 8)  // PB8 is the Chip Select pin
+int  read_rows();
+void update_history(int col, int rows);
+void drive_column(int);
+
+
 
 
 //uint16_t display[34] = {
@@ -34,34 +40,22 @@ extern uint16_t display[34];
 
 void init_spi1(void) {
     RCC->AHBENR |= RCC_AHBENR_GPIOAEN | RCC_AHBENR_GPIOBEN;
-    RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
+    RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;GPIOB->MODER |= 0x10410000; //gpiob 8,11,14 outputs
 
-    // GPIOA5 = SCK, GPIOA7 = MOSI, GPIOA6 = MISO (optional), GPIOA15 = NSS (optional)
-    GPIOA->MODER &= ~(3<<(5*2) | 3<<(7*2));
-    GPIOA->MODER |=  (2<<(5*2) | 2<<(7*2)); // AF mode
-    GPIOA->AFR[0] |= (0 << (5*4)) | (0 << (7*4)); // AF0 for SPI1
+    // Set PB3 and PB5 to Alternate Function mode (10b)
+    GPIOB->MODER &= ~0x00000CC0; // Clear mode for PB3 (bits 7:6) and PB5 (bits 11:10)
+    GPIOB->MODER |=  0x00000880; // Set AF mode for PB3 and PB5
 
-    // CS = PB8 (manual)
-    GPIOB->MODER &= ~(3 << (8*2));
-    GPIOB->MODER |=  (1 << (8*2));
-    GPIOB->ODR |= (1 << 8); // CS high
-
-    // DC = PB14 (output)
-    GPIOB->MODER &= ~(3 << (14*2));
-    GPIOB->MODER |=  (1 << (14*2));
-
-    // RESET = PB11 (output)
-    GPIOB->MODER &= ~(3 << (11*2));
-    GPIOB->MODER |=  (1 << (11*2));
-
-    SPI1->CR1 = 0;
-    SPI1->CR1 |= SPI_CR1_MSTR     // Master mode
-              |  SPI_CR1_BR_1     // Baud rate = fPCLK/8 (safe for most displays)
-              |  SPI_CR1_SSI
-              |  SPI_CR1_SSM
-              |  SPI_CR1_SPE;     // Enable SPI
-
+    // Set PB3 and PB5 to AF0 (AFR[0], bits 15:0)
+    GPIOB->AFR[0] &= ~0x00F00F00; // Clear AFRL for PB3 (bits 15:12) and PB5 (bits 23:20)
+    
+    //GPIOB->MODER |= 0x88000000; //13,15 afmode Switched to 3,5
+    //GPIOB->AFR[1] &= 0x0F0FFFFF; //13,15 af[0]
+    SPI1->CR1 &= ~SPI_CR1_SPE; //spe clear
+    SPI1->CR1 |= SPI_CR1_MSTR | SPI_CR1_SSM | SPI_CR1_SSI; //master mode and ssm/ssi bits
     SPI1->CR2 = SPI_CR2_DS_3 | SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0; // 16-bit mode
+    SPI2->CR1 |= SPI_CR1_SPE; //spe enable
+
 }
 
 

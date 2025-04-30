@@ -478,18 +478,12 @@ void game_logic_loop() {
 // Main function
 int main(void) {
     internal_clock();
-    init_spi1();
+    //init_spi1();
+    enable_ports();
+    setup_tim1();
+    init_tim7();
     LCD_Setup();
-
-    //while (1) {
-     //   GPIOB->ODR &= ~(1 << 8); // CS LOW
-       // LCD_WriteData16(0xAAAA);
-       // GPIOB->ODR |= (1 << 8);  // CS HIGH
-
-        //nano_wait(1000);
-    
-    
-    
+    LCD_Clear(GREEN);
 
     msg[0] |= font['S'];
     msg[1] |= font['C'];
@@ -500,11 +494,19 @@ int main(void) {
     msg[6] |= font['0'];
     msg[7] |= font[' '];
 
-    enable_ports();
-    setup_tim1();
-    init_tim7();
-    lcd_test();
-    setup_audio_pwm();
+    //LCD_Setup();
+    //LCD_Clear(GRAY);
+
+    while (1) {
+        GPIOB->ODR &= ~(1 << 8); // CS LOW
+       // LCD_WriteData16(0xAAAA);
+        GPIOB->ODR |= (1 << 8);  // CS HIGH
+
+        nano_wait(1000);
+    
+    }
+    
+
 
     game_logic_loop();
 }
