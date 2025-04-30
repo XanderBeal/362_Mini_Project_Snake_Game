@@ -8,6 +8,27 @@
 #include <spi_setup.h>
 #include "lcd.h"
 
+#define WHITE       0xFFFF
+#define BLACK       0x0000
+#define BLUE        0x001F
+#define YELLOW      0XFFE0
+#define GBLUE       0X07FF
+#define RED         0xF800
+#define MAGENTA     0xF81F
+#define GREEN       0x07E0
+#define CYAN        0x7FFF
+#define BROWN       0XBC40
+#define BRRED       0XFC07
+#define GRAY        0X8430
+#define DARKBLUE    0X01CF
+#define LIGHTBLUE   0X7D7C
+#define GRAYBLUE    0X5458
+#define LIGHTGREEN  0X841F
+#define LIGHTGRAY   0XEF5B
+#define LGRAY       0XC618
+#define LGRAYBLUE   0XA651
+#define LBBLUE      0X2B12
+
 
 void set_char_msg(int, char);
 void nano_wait(unsigned int);
@@ -15,6 +36,7 @@ void game(void);
 void internal_clock();
 
 void enable_ports(void) {
+    // Only enable port C for the keypad
     RCC->AHBENR |= RCC_AHBENR_GPIOCEN;
     GPIOC->MODER &= ~0xffff;
     GPIOC->MODER |= 0x55 << (4*2);
@@ -22,6 +44,114 @@ void enable_ports(void) {
     GPIOC->OTYPER |= 0xf0;
     GPIOC->PUPDR &= ~0xff;
     GPIOC->PUPDR |= 0x55;
+}
+
+
+uint8_t col; // the column being scanned
+
+void drive_column(int);   // energize one of the column outputs
+int  read_rows();         // read the four row inputs
+void update_history(int col, int rows); // record the buttons of the driven column
+char get_key_event(void); // wait for a button event (press or release)
+char get_keypress(void);  // wait for only a button press event.
+float getfloat(void);     // read a floating-point number from keypad
+void show_keys(void);     // demonstrate get_key_event()
+
+// Bit Bang SPI LED Array
+int msg_index = 0;
+uint16_t msg[8] = { 0x0000,0x0100,0x0200,0x0300,0x0400,0x0500,0x0600,0x0700 };
+extern const char font[];
+
+// Configure PB12 (CS), PB13 (SCK), and PB15 (SDI) for outputs
+void setup_bb(void) {
+    RCC->AHBENR |= RCC_AHBENR_GPIOBEN;
+
+    GPIOB->MODER &= ~((3 << (12 * 2)) | (3 << (13 * 2)) | (3 << (15 * 2)));
+    GPIOB->MODER |= (1 << (12 * 2)) | (1 << (13 * 2)) | (1 << (15 * 2));
+    GPIOB->ODR |= (1 << 12); // Set CS high
+    GPIOB->ODR &= ~(1 << 13); // Set SCK low
+}
+
+void small_delay(void) {
+    nano_wait(5000);
+}
+
+// Set the MOSI bit, then set the clock high and low.
+// Pause between doing these steps with small_delay().
+void bb_write_bit(int val) {
+    if (val) {
+        GPIOB->ODR |= (1 << 15); // Set MOSI high
+    } else {
+        GPIOB->ODR &= ~(1 << 15); // Set MOSI low
+    }
+
+    small_delay();
+
+    GPIOB->ODR |= (1 << 13); // Set SCK high
+    small_delay();
+
+    GPIOB->ODR &= ~(1 << 13); // Set SCK low
+}
+
+// Set CS (PB12) low,
+// write 16 bits using bb_write_bit,
+// then set CS high.
+void bb_write_halfword(int halfword) {
+    GPIOB->ODR &= ~(1 << 12); // Set CS low
+
+    for (int i = 15; i >= 0; i--) {
+        bb_write_bit((halfword >> i) & 1); // Send each bit
+    }
+
+    GPIOB->ODR |= (1 << 12); // Set CS high
+}
+
+// Continually bitbang the msg[] array.
+void drive_bb(void) {
+    for(;;)
+        for(int d=0; d<8; d++) {
+            bb_write_halfword(msg[d]);
+            nano_wait(1000000); // wait 1 ms between digits
+        }
+}
+
+// Configure Timer 15 for an update rate of 1 kHz.
+// Trigger the DMA channel on each update.
+
+void init_tim15(void) {
+    RCC->APB2ENR |= RCC_APB2ENR_TIM15EN; // Enable the RCC 
+
+    (void)RCC->APB2ENR;
+    TIM15->PSC = 47;
+    TIM15->ARR = 999;
+    TIM15->DIER |= TIM_DIER_UDE;
+    TIM15->CR1 |= TIM_CR1_CEN;
+}
+
+// Configure timer 7 to invoke the update interrupt at 1kHz
+void init_tim7(void) {
+    RCC->APB1ENR |= RCC_APB1ENR_TIM7EN;
+
+    (void)RCC->APB1ENR;
+    TIM7->PSC = 47;
+    TIM7->ARR = 999; 
+    TIM7->DIER |= TIM_DIER_UIE;
+    NVIC_EnableIRQ(TIM7_IRQn);
+    NVIC_SetPriority(TIM7_IRQn, 2);
+
+    // Enable the timer
+    TIM7->CR1 |= TIM_CR1_CEN;
+}
+
+// Copy the Timer 7 ISR from lab 5
+
+void TIM7_IRQHandler(void) {
+    TIM7->SR &= ~TIM_SR_UIF;
+    int rows = read_rows();
+    update_history(col, rows);
+
+    col = (col + 1) & 3;
+    drive_column(col);
 }
 
 //Timer Setups
@@ -67,18 +197,6 @@ void setup_tim1() { // Might want to switch to TIM14 or TIM 3 to trigger faster
 }
 
 
-
-uint16_t display[34] = {
-    0x002, // Command to set the cursor at the first position line 1
-    0x200+'E', 0x200+'A', 0x200+'T', 0x200+' ', 0x200+'A', + 0x200+'S', 0x200+' ', 0x200+'M',
-    0x200+'U', 0x200+'C', 0x200+'H', 0x200+' ', + 0x200+'A', 0x200+'S', 0x200+' ', 0x200+' ',
-    0x0c0, // Command to set the cursor at the first position line 2
-    0x200+'Y', 0x200+'O', 0x200+'U', 0x200+' ', 0x200+'C', + 0x200+'A', 0x200+'N', 0x200+' ',
-    0x200+'G', 0x200+'U', 0x200+'D', 0x200+' ', + 0x200+'L', 0x200+'U', 0x200+'C', 0x200+'K',
-};
-
-int msg_index = 0;
-uint16_t msg[8] = { 0x0000,0x0100,0x0200,0x0300,0x0400,0x0500,0x0600,0x0700 };
 extern const char font[];
 void print(const char str[]);
 
@@ -100,7 +218,7 @@ uint8_t col;
 
 //TFT lcd 2.2 inch spi display
 void lcd_test(void);
-void UI_Setup(u16 Color);
+//void UI_Setup(u16 Color);
 void game_logic_loop(void);
 void game_setup(void);
 
@@ -197,11 +315,11 @@ void lcd_test(void){
     UI_Setup(YELLOW);
 
     //loading picture / screen
-    //LCD_DrawPicture();
+   // LCD_DrawPicture();
 
-    game_setup();
+    //game_setup();
 
-    game_logic_loop();
+    //game_logic_loop();
 
 
 }
@@ -476,14 +594,59 @@ void game_logic_loop() {
 
 
 // Main function
+
+#include "stm32f0xx.h"
+
+void internal_clock(void);
+void enable_ports(void);
+void init_tim7(void);
+void init_tim15(void);
+//void setup_tim1(void);
+//void setup_audio_pwm(void);
+void setup_bb(void);
+//void init_spi1(void);
+void LCD_Setup(void);
+void lcd_test(void);
+void spi2_setup_dma(void);
+void spi2_enable_dma(void);
+void game_logic_loop(void);
+void init_lcd_spi(void);
+
+
+
+
+
 int main(void) {
+    
     internal_clock();
-    //init_spi1();
+
+    //keypad
     enable_ports();
-    setup_tim1();
     init_tim7();
+    init_tim15();
+
+    //idk
+    setup_tim1();
+    setup_audio_pwm();
+
+    //7-bit display
+    init_spi2();
+    spi2_setup_dma();
+    spi2_enable_dma();
+    init_tim15();
+
+    //show_keys(); //use to test keypad and 7-bit display interface
+
+    //TFT Display
+    //init_spi1();
+    //setup_tim1();
     LCD_Setup();
-    LCD_Clear(GREEN);
+    LCD_Clear(BLACK);
+
+
+
+    //LCD_Clear(GREEN);
+    lcd_test();
 
     msg[0] |= font['S'];
     msg[1] |= font['C'];
@@ -507,6 +670,5 @@ int main(void) {
     }
     
 
-
-    game_logic_loop();
+  //  game_logic_loop();
 }

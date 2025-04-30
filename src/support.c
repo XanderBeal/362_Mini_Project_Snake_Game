@@ -196,64 +196,7 @@ void spi1_dma_display2(const char *str)
 }
 
 
-//===========================================================================
-// Configure PB12 (CS), PB13 (SCK), and PB15 (SDI) for outputs
-//===========================================================================
-void setup_bb(void) {
-    RCC->AHBENR |= RCC_AHBENR_GPIOBEN;
 
-    GPIOB->MODER &= ~((3 << (12 * 2)) | (3 << (13 * 2)) | (3 << (15 * 2)));
-    GPIOB->MODER |= (1 << (12 * 2)) | (1 << (13 * 2)) | (1 << (15 * 2));
-    GPIOB->ODR |= (1 << 12); // Set CS high
-    GPIOB->ODR &= ~(1 << 13); // Set SCK low
-}
-
-void small_delay(void) {
-    nano_wait(5000);
-}//===========================================================================
-// Set the MOSI bit, then set the clock high and low.
-// Pause between doing these steps with small_delay().
-//===========================================================================
-void bb_write_bit(int val) {
-    if (val) {
-        GPIOB->ODR |= (1 << 15); // Set MOSI high
-    } else {
-        GPIOB->ODR &= ~(1 << 15); // Set MOSI low
-    }
-
-    small_delay();
-
-    GPIOB->ODR |= (1 << 13); // Set SCK high
-    small_delay();
-
-    GPIOB->ODR &= ~(1 << 13); // Set SCK low
-}
-
-//===========================================================================
-// Set CS (PB12) low,
-// write 16 bits using bb_write_bit,
-// then set CS high.
-//===========================================================================
-void bb_write_halfword(int halfword) {
-    GPIOB->ODR &= ~(1 << 12); // Set CS low
-
-    for (int i = 15; i >= 0; i--) {
-        bb_write_bit((halfword >> i) & 1); // Send each bit
-    }
-
-    GPIOB->ODR |= (1 << 12); // Set CS high
-}
-
-//===========================================================================
-// Continually bitbang the msg[] array.
-//===========================================================================
-void drive_bb(void) {
-    for(;;)
-        for(int d=0; d<8; d++) {
-            bb_write_halfword(msg[d]);
-            nano_wait(1000); // wait 1 ms between digits
-        }
-}
 
 /*#include "stm32f0xx.h"
 #include <string.h> // for memmove()

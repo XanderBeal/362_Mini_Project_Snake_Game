@@ -127,61 +127,6 @@ void LCD_WriteRAM_Prepare(void)
 {
     LCD_WR_REG(lcddev.wramcmd);
 }
-/*
-void LCD_WriteCommand(uint16_t cmd) {
-    DC_COMMAND();
-    GPIOB->ODR &= ~(1 << 8); // CS LOW
-
-    while (!(SPI1->SR & SPI_SR_TXE));
-    SPI1->DR = cmd;
-    while (SPI1->SR & SPI_SR_BSY);
-
-    GPIOB->ODR |= (1 << 8);  // CS HIGH
-}
-
-
-
-void LCD_WriteData16(uint16_t data) {
-    // DC = data mode, CS LOW
-    GPIOB->ODR |= (1 << 14);      // DC
-    GPIOB->ODR &= ~(1 << 8);      // CS LOW
-
-    // Wait until TXE is ready
-    while (!(SPI1->SR & SPI_SR_TXE));
-    SPI1->DR = data;
-
-    // 🟢 This part is important to finish transmission
-    while (SPI1->SR & SPI_SR_BSY); // Wait until not busy
-
-    // 🧹 Clear RXNE if necessary (read to clear flags)
-    volatile uint16_t dummy = SPI1->DR;
-    (void)dummy;  // Prevent compiler warning
-
-
-    // CS HIGH
-    GPIOB->ODR |= (1 << 8);       // CS HIGH
-}
-
-
-
-*/
-
-    /*if (val == 0) {
-        while(SPI1->SR & SPI_SR_BSY);
-        CS_HIGH;
-    } else {
-        while((GPIOB->ODR & (CS_BIT)) == 0) {
-            ; // If CS is already low, this is an error.  Loop forever.
-            // This has happened because something called a drawing subroutine
-            // while one was already in process.  For instance, the main()
-            // subroutine could call a long-running LCD_DrawABC function,
-            // and an ISR interrupts it and calls another LCD_DrawXYZ function.
-            // This is a common mistake made by students.
-            // This is what catches the problem early.
-        }
-        CS_LOW;
-    }*/
-
 
 
 #if defined(SLOW_SPI)
@@ -394,11 +339,6 @@ void LCD_Init(void (*reset)(int), void (*select)(int), void (*reg_select)(int))
     lcddev.select(0);
 }
 
-/*__attribute((weak)) void init_lcd_spi(void)
-{
-    printf("init_lcd_spi() not defined.");
-}
-*/
 void LCD_Setup() {
     init_spi1();
     tft_select(0);
