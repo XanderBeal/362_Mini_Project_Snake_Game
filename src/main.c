@@ -425,7 +425,6 @@ void draw_cell(int x, int y, u16 color) {
         color
     );
 }
-
 void clear_board() {
     for (int x = 0; x < BOARD_WIDTH; x++) {
         for (int y = 0; y < BOARD_HEIGHT; y++) {
@@ -433,7 +432,6 @@ void clear_board() {
         }
     }
 }
-
 void update_display() {
     // Clear board first (or just update old segments if optimized later)
     clear_board();
@@ -459,7 +457,6 @@ void update_display() {
     }
     
 }
-
 void update_score() {
     if (just_ate_apple) {
         score++;
@@ -477,7 +474,6 @@ void update_score() {
         msg[6] = font['0'];
     }
 }
-
 void update_snake() {
     just_ate_apple = 0;
 
@@ -524,7 +520,6 @@ void update_snake() {
 
     }
 }
-
 void place_apple() {
     srand(TIM14->CNT);
     apple.x = random() % BOARD_WIDTH;
@@ -535,8 +530,6 @@ void place_apple() {
 
 
 }
-
-
 void reset_game() {
     snake_length = 3;
     snake[0].x = 5; snake[0].y = 5;
@@ -552,8 +545,6 @@ void reset_game() {
     place_apple();          // Random apple location
     update_display();       // Refresh visual state
 }
-
-
 void game_logic_loop() {
     while (1) {
         update_snake();
@@ -586,20 +577,6 @@ void game_logic_loop() {
     }
 }
 
-    //snake position update
-        //keep in mind boundry
-
-    //score update
-
-    //display update
-        //current position / score / win / lose condition
-
-
-
-
-
-// Main function
-
 #include "stm32f0xx.h"
 
 void internal_clock(void);
@@ -624,7 +601,6 @@ void lcd_hello_world_test(void) {
     LCD_DrawString(20, 100, YELLOW, BLACK, "HELLO", 16, 0);
     LCD_DrawString(20, 120, YELLOW, BLACK, "WORLD!", 16, 0);
 }
-
 void lcd_color_test(void) {
     LCD_Setup();
 
@@ -640,16 +616,68 @@ void lcd_color_test(void) {
     LCD_Clear(WHITE);
 }
 
+void init_lcd_spi(void) {
+    //GPIOB clock 
+    RCC->AHBENR |= RCC_AHBENR_GPIOBEN;
 
+    GPIOB->MODER &= ~(GPIO_MODER_MODER8_Msk | GPIO_MODER_MODER11_Msk | GPIO_MODER_MODER14_Msk);
+    GPIOB->MODER |=  (GPIO_MODER_MODER8_0  | GPIO_MODER_MODER11_0  | GPIO_MODER_MODER14_0); // Output mode
+    
+    // Enable GPIOB and SPI1 clocks
+    RCC->AHBENR  |= RCC_AHBENR_GPIOBEN;
+    RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
 
+    // Set PB3 (SCK), PB4 (MISO), PB5 (MOSI) to alternate function mode (AF0)
+    GPIOB->MODER &= ~(GPIO_MODER_MODER3_Msk | GPIO_MODER_MODER4_Msk | GPIO_MODER_MODER5_Msk);
+    GPIOB->MODER |=  (GPIO_MODER_MODER3_1  | GPIO_MODER_MODER4_1  | GPIO_MODER_MODER5_1);
+
+    GPIOB->AFR[0] &= ~(GPIO_AFRL_AFSEL3_Msk | GPIO_AFRL_AFSEL4_Msk | GPIO_AFRL_AFSEL5_Msk); // AF0
+
+    // Disable SPI before configuration
+    SPI1->CR1 &= ~SPI_CR1_SPE;
+
+    // Set slow baud rate (fPCLK/256), master mode, software NSS management
+    SPI1->CR1 = SPI_CR1_MSTR | SPI_CR1_SSM | SPI_CR1_SSI | (SPI1->CR1 & ~SPI_CR1_BR_Msk) | (SPI_CR1_BR_0);
+
+    // Set 8-bit data size and FIFO reception threshold for 8-bit
+    SPI1->CR2 = SPI_CR2_FRXTH | (7 << SPI_CR2_DS_Pos); // DS = 7 for 8-bit
+
+    //enable SPI
+    SPI1->CR1 |= SPI_CR1_SPE;
+}
+
+void init_spi1_slow(void) {
+    // Enable GPIOB and SPI1 clocks
+    RCC->AHBENR  |= RCC_AHBENR_GPIOBEN;
+    RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
+
+    // Set PB3 (SCK), PB4 (MISO), PB5 (MOSI) to alternate function mode (AF0)
+    GPIOB->MODER &= ~(GPIO_MODER_MODER3_Msk | GPIO_MODER_MODER4_Msk | GPIO_MODER_MODER5_Msk);
+    GPIOB->MODER |=  (GPIO_MODER_MODER3_1  | GPIO_MODER_MODER4_1  | GPIO_MODER_MODER5_1);
+
+    GPIOB->AFR[0] &= ~(GPIO_AFRL_AFSEL3_Msk | GPIO_AFRL_AFSEL4_Msk | GPIO_AFRL_AFSEL5_Msk); // AF0
+
+    // Disable SPI before configuration
+    SPI1->CR1 &= ~SPI_CR1_SPE;
+
+    // Set slow baud rate (fPCLK/256), master mode, software NSS management
+    SPI1->CR1 = SPI_CR1_MSTR | SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_BR_Msk;
+
+    // Set 8-bit data size and FIFO reception threshold for 8-bit
+    SPI1->CR2 = SPI_CR2_FRXTH | (7 << SPI_CR2_DS_Pos); // DS = 7 for 8-bit
+
+    // Enable SPI
+    SPI1->CR1 |= SPI_CR1_SPE;
+}
 
 int main(void) {
 
     internal_clock();
     //lcd_hello_world_test();  // <-- Run test
-    lcd_color_test();
+
+
     while (1) {
-        // halt here
+        lcd_color_test();
     }
    /* 
     internal_clock();
