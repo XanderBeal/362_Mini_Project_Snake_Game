@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include <lcd.h>
 #include <spi_setup.h>
@@ -227,60 +228,108 @@ int volume = 2400; // Analog-to-digital conversion for a volume level
 
 // TRRS Audio Jack Components
 // TODO: Add TRRS audio jack setup code
-void setup_audio_pwm() {
-    // Enable GPIOA and TIM14 clocks
-    RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
-    RCC->APB1ENR |= RCC_APB1ENR_TIM14EN;
+#define N 1000
+#define RATE 20000
+short int wavetable[N];
+int step0 = 0;
+int offset0 = 0;
+int step1 = 0;
+int offset1 = 0;
 
-    // Set PA4 to alternate function mode
-    GPIOA->MODER &= ~(3 << (4 * 2));
-    GPIOA->MODER |=  (2 << (4 * 2));  // Alternate function
-
-    // Select AF4 for PA4 = TIM14_CH1
-    GPIOA->AFR[0] &= ~(0xF << (4 * 4));
-    GPIOA->AFR[0] |=  (4 << (4 * 4));  // AF4 = TIM14
-
-    // Configure TIM14 for PWM mode
-    TIM14->PSC = 0;        // No prescaler (48 MHz clock)
-    TIM14->ARR = 999;      // Set for ~48kHz base rate
-
-    TIM14->CCR1 = 0;       // Start with sound off
-
-    TIM14->CCMR1 &= ~(7 << 4);  // Clear OC1M bits
-    TIM14->CCMR1 |=  (6 << 4);  // Set PWM Mode 1
-    TIM14->CCMR1 |= TIM_CCMR1_OC1PE;  // Enable preload
-
-    TIM14->CCER |= TIM_CCER_CC1E;     // Enable output on CH1
-    TIM14->CR1 |= TIM_CR1_ARPE;       // Auto-reload preload enable
-    TIM14->EGR |= TIM_EGR_UG;         // Force update
-    TIM14->CR1 |= TIM_CR1_CEN;        // Enable the timer
+void init_wavetable(void) {
+    for(int i=0; i < N; i++)
+        wavetable[i] = 32767 * sin(2 * M_PI * i / N);
 }
 
-
-void play_tone(int freq, int duration_ms) {
-    int arr = 48000000 / freq;
-    if (arr < 1) arr = 1;
-    TIM14->ARR = arr - 1;
-    TIM14->CCR1 = arr / 2;  // 50% duty for square wave
-
-    for (int i = 0; i < duration_ms * 1000; i += 100) {
-        nano_wait(1000);
+void set_freq(int chan, float f) {
+    if (chan == 0) {
+        if (f == 0.0) {
+            step0 = 0;
+            offset0 = 0;
+        } else
+            step0 = (f * N / RATE) * (1<<16);
     }
-
-    TIM14->CCR1 = 0; // Turn off sound
+    if (chan == 1) {
+        if (f == 0.0) {
+            step1 = 0;
+            offset1 = 0;
+        } else
+            step1 = (f * N / RATE) * (1<<16);
+    }
 }
 
+void setup_dac(void) {
+    RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
+    GPIOA->MODER |= (0x3 << (4 * 2));
+    RCC->APB1ENR |= RCC_APB1ENR_DACEN;
+
+    // DAC->CR &= ~DAC_CR_EN1;
+    DAC->CR &= ~DAC_CR_TSEL1;
+    DAC->CR |= DAC_CR_TEN1;
+    DAC->CR|= DAC_CR_EN1;
+}
+
+void TIM6_DAC_IRQHandler(void){
+    TIM6->SR &= ~TIM_SR_UIF;
+    offset0 += step0;
+    offset1 += step1;
+
+    if (offset0 >= (N<<16)){
+        offset0 -= (N<<16);
+    } else if (offset1 >= (N<<16)){
+        offset1 -= (N<<16);
+    }
+    int samp = wavetable[offset0 >> 16] + wavetable[offset1 >> 16];
+
+    samp = (samp * volume) >> 17;
+    samp += 2048;
+    DAC->DHR12R1 = samp;
+
+}
+
+void init_tim6(void) {
+    RCC->APB1ENR |= RCC_APB1ENR_TIM6EN;
+    TIM6->PSC = (48000000 / (RATE * 100)) - 1;
+    TIM6->ARR = 100 - 1;
+    TIM6->CR2 &= ~TIM_CR2_MMS;
+    TIM6->CR2 |= TIM_CR2_MMS_1;
+    TIM6->DIER |= TIM_DIER_UIE;
+    NVIC_EnableIRQ(TIM6_DAC_IRQn);
+
+    TIM6->CR1 |= TIM_CR1_CEN;
+}
+
+void play_note(float freq, int duration_ms) {
+    set_freq(0, freq);
+    for (int i = 0; i < duration_ms * 100; i++)
+        nano_wait(10000);  // rough ms delay
+    set_freq(0, 0.0f);
+    nano_wait(100000);  // small pause between notes
+}
 
 void sound_apple_eaten() {
-    play_tone(800, 100);  // short chirp
+    play_note(300.0f, 100);
+    nano_wait(10000);
+    play_note(400.0f, 100);
+    nano_wait(10000);
+    play_note(500.0f, 100);
+    nano_wait(10000);
+    play_note(650.0f, 100);
+    nano_wait(10000);
+    play_note(800.0f, 100);
+    nano_wait(10000);
+    play_note(1000.0f, 150);
+
+    play_note(0.0f,0);
 }
 
 void sound_death() {
-    play_tone(300, 200);  // low tone
-    nano_wait(2000);
-    play_tone(200, 300);  // even lower tone
+    play_note(1000.0f, 150);
+    play_note(800.0f, 150);
+    play_note(600.0f, 150);
+    play_note(400.0f, 200);
+    play_note(200.0f, 300);
 }
-
 
 // RGB LED Components
 // TODO: Add RGB LED setup code
@@ -622,10 +671,10 @@ int main(void) {
     init_tim7();
     init_tim15(); 
 
-
-
-    setup_tim1();
-    setup_audio_pwm();
+    //sound (trss)
+    setup_dac();
+    init_wavetable();
+    init_tim6();
 
     //7-bit display
     init_spi2();
@@ -692,12 +741,14 @@ int main(void) {
 
             int ate = move_snake(&snake, apple);
             if (check_collision(&snake)) {
+                sound_death();
                 reset_game(&snake, &apple, &score);
                 continue;  // skip rest of loop this frame
             }
 
             if (ate) {
                 apple = spawn_random_apple();
+                sound_apple_eaten();
             
 
             score++;
