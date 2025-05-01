@@ -450,9 +450,10 @@ void draw_cell(int grid_x, int grid_y, uint16_t color) {
 
 void draw_snake(const Snake *snake) {
     for (int i = 0; i < snake->length; i++) {
-        uint16_t color = (i == 0) ? BLACK : SNAKE_COLOR;
+        uint16_t color = (i == 0) ? GREEN : SNAKE_COLOR;
         draw_cell(snake->body[i].x, snake->body[i].y, color);
     }
+        //draw_cell(snake->body[i].x, snake->body[i].y, GREEN);
 }
 
 
@@ -706,6 +707,8 @@ int main(void) {
     msg[6] |= font[' '];
     msg[7] |= font['0'];
     //game_logic_loop();
+    draw_apple(apple.x, apple.y);
+    
     while (1) {
         
         static char last_key = 0;
@@ -773,8 +776,8 @@ int main(void) {
             setrgb(0x009900);
         }
     
-            LCD_Clear(BG_COLOR);
-            draw_apple(apple.x, apple.y);
+            //LCD_Clear(BG_COLOR);
+            //draw_apple(apple.x, apple.y);
             draw_snake(&snake);
     
             nano_wait(150000000); 
