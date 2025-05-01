@@ -349,9 +349,9 @@ void lcd_test(void){
 #define CELL_SIZE 10
 #define ORIGIN_X 20
 #define ORIGIN_Y 20
-#define SNAKE_COLOR GREEN
+#define SNAKE_COLOR BLUE
 #define APPLE_COLOR RED
-#define BG_COLOR BLUE
+#define BG_COLOR GREEN
 #define CELL_SIZE   10
 #define GRID_COLS   16
 #define GRID_ROWS   20
@@ -359,240 +359,157 @@ void lcd_test(void){
 #define OFFSET_Y    60
 
 
+
+
+void draw_apple(int grid_x, int grid_y) {
+    int x0 = OFFSET_X + grid_x * CELL_SIZE;
+    int y0 = OFFSET_Y + grid_y * CELL_SIZE;
+    int x1 = x0 + CELL_SIZE - 1;
+    int y1 = y0 + CELL_SIZE - 1;
+    LCD_DrawFillRectangle(x0, y0, x1, y1, APPLE_COLOR);
+}
+
+#include <stdlib.h>
+
 typedef struct {
-    int x; // grid column (0 to 15)
-    int y; // grid row (0 to 19)
+    int x;
+    int y;
 } Point;
 
-Point apple;
+typedef struct {
+    Point body[MAX_SNAKE_LENGTH];
+    int length;
+    int direction;
+} Snake;
 
 
-void game_setup(){
-    LCD_Setup();
-    //snake starting position and food starting position
-    LCD_Clear(GREEN);       // Set full screen background to green
-    UI_Setup(BLACK);        // Optional: black border on green background
-
-    //reset_game();           // Snake, apple, score, etc.
+Point spawn_random_apple(void) {
+    Point apple;
+    apple.x = rand() % GRID_COLS;
+    apple.y = rand() % GRID_ROWS;
+    draw_apple(apple.x, apple.y);
+    return apple;
 }
 
-// For RGB Game Correlations
-typedef enum {
-    STATUS_PLAYING,
-    STATUS_EATING,
-    STATUS_DEAD
-} GameStatus;
+void draw_cell(int grid_x, int grid_y, uint16_t color) {
+    int x0 = OFFSET_X + grid_x * CELL_SIZE;
+    int y0 = OFFSET_Y + grid_y * CELL_SIZE;
+    int x1 = x0 + CELL_SIZE - 1;
+    int y1 = y0 + CELL_SIZE - 1;
+    LCD_DrawFillRectangle(x0, y0, x1, y1, color);
+}
 
-volatile GameStatus current_status = STATUS_PLAYING;
-void set_status_color(GameStatus status) {
-    static int on = 0;  // toggle state
+void draw_snake(const Snake *snake) {
+    for (int i = 0; i < snake->length; i++) {
+        uint16_t color = (i == 0) ? BLACK : SNAKE_COLOR;
+        draw_cell(snake->body[i].x, snake->body[i].y, color);
+    }
+}
 
-    on = !on;
 
-    switch (status) {
-        case STATUS_PLAYING:  // Green
-            if (on)
-                setrgb(0x009900);  // 99% green
-            else
-                setrgb(0x000000);  // Off
+Snake init_snake(void) {
+    Snake s;
+    s.length = 2;
+    s.direction = DIR_RIGHT;  // Start moving right
+
+    int start_x = GRID_COLS / 2;
+    int start_y = GRID_ROWS / 2;
+
+    s.body[0].x = start_x;
+    s.body[0].y = start_y;
+    s.body[1].x = start_x - 1;
+    s.body[1].y = start_y;
+
+    draw_snake(&s);
+
+    return s;
+}
+
+void handle_input(Snake *snake) {
+    char key = get_key_event();  // assumes this function already works
+
+    switch (key) {
+        case '2':
+            if (snake->direction != DIR_DOWN)
+                snake->direction = DIR_UP;
             break;
-
-        case STATUS_EATING:   // Blue
-            if (on)
-                setrgb(0x000099);  // 99% blue
-            else
-                setrgb(0x000000);  // Off
+        case '4':
+            if (snake->direction != DIR_RIGHT)
+                snake->direction = DIR_LEFT;
             break;
-
-        case STATUS_DEAD:     // Red
-            if (on)
-                setrgb(0x990000);  // 99% red
-            else
-                setrgb(0x000000);  // Off
+        case '5':
+            if (snake->direction != DIR_UP)
+                snake->direction = DIR_DOWN;
             break;
+        case '6':
+            if (snake->direction != DIR_LEFT)
+                snake->direction = DIR_RIGHT;
+            break;
+        default:
+            break;  // ignore unrecognized input
     }
 }
 
-void place_apple(void);
-void LCD_DrawString(u16 x, u16 y, u16 fc, u16 bg, const char *p, u8 size, u8 mode);
-void LCD_DrawFillRectangle(u16 x, u16 y, u16 w, u16 h, u16 color);
+int move_snake(Snake *snake, Point apple) {
+    Point new_head = snake->body[0];  // start from current head
 
+    // Compute next head position
+    switch (snake->direction) {
+        case DIR_UP:    new_head.y--; break;
+        case DIR_DOWN:  new_head.y++; break;
+        case DIR_LEFT:  new_head.x--; break;
+        case DIR_RIGHT: new_head.x++; break;
+    }
 
+    // Check if apple is eaten
+    int ate_apple = (new_head.x == apple.x && new_head.y == apple.y);
 
-Point snake[MAX_SNAKE_LENGTH];
-int snake_length = 3;
-int direction = 0; // 0=up, 1=right, 2=down, 3=left
+    // Move the body
+    if (ate_apple && snake->length < MAX_SNAKE_LENGTH) {
+        snake->length++;  // Grow snake
+    }
 
-int just_ate_apple = 0;
-int snake_dead = 0;
+    // Shift body segments (either keep or overwrite the tail)
+    for (int i = snake->length - 1; i > 0; i--) {
+        snake->body[i] = snake->body[i - 1];
+    }
 
-void draw_cell(int x, int y, u16 color) {
-    LCD_DrawFillRectangle(
-        ORIGIN_X + x * CELL_SIZE,
-        ORIGIN_Y + y * CELL_SIZE,
-        CELL_SIZE - 1,
-        CELL_SIZE - 1,
-        color
-    );
+    // Set new head
+    snake->body[0] = new_head;
+
+    return ate_apple;
 }
-void clear_board() {
-    for (int x = 0; x < BOARD_WIDTH; x++) {
-        for (int y = 0; y < BOARD_HEIGHT; y++) {
-            draw_cell(x, y, BG_COLOR);
-        }
-    }
-}
-void update_display() {
-    // Clear board first (or just update old segments if optimized later)
-    LCD_Setup();
-    clear_board();
 
-    // Draw snake
-    for (int i = 0; i < snake_length; i++) {
-        draw_cell(snake[i].x, snake[i].y, SNAKE_COLOR);
-    }
+int check_collision(const Snake *snake) {
+    Point head = snake->body[0];
 
-    // Draw apple
-    draw_cell(apple.x, apple.y, APPLE_COLOR);
-
-    if (snake_dead) {
-        LCD_Clear(RED);
-        LCD_DrawString(60, 140, WHITE, RED, "YOU DIED", 1, 1);
-        LCD_DrawString(40, 160, WHITE, RED, "Press * to restart", 1, 1);
-    }
-    
-    // Optional win message (e.g., 100 apples)
-    if (score >= 100) {
-        LCD_Clear(BLUE);
-        LCD_DrawString(60, 140, YELLOW, BLUE, "YOU WIN!", 1, 1);
-    }
-    
-}
-void update_score() {
-    if (just_ate_apple) {
-        score++;
-
-        int tens = (score / 10) % 10;
-        int ones = score % 10;
-
-        msg[5] = font['0' + tens];
-        msg[6] = font['0' + ones];
-    }
-
-    if (snake_dead) {
-        score = 0;
-        msg[5] = font['0'];
-        msg[6] = font['0'];
-    }
-}
-void update_snake() {
-    LCD_Setup();
-    just_ate_apple = 0;
-
-    // Move body
-    for (int i = snake_length - 1; i > 0; i--) {
-        snake[i] = snake[i - 1];
-    }
-
-    // Move head
-    switch (direction) {
-        case 0: snake[0].y--; break; // Up
-        case 1: snake[0].x++; break; // Right
-        case 2: snake[0].y++; break; // Down
-        case 3: snake[0].x--; break; // Left
-    }
-
-    // Check wall collision
-    if (snake[0].x < 0 || snake[0].x >= BOARD_WIDTH || snake[0].y < 0 || snake[0].y >= BOARD_HEIGHT) {
-        snake_dead = 1;
-        return;
+    // Check boundary collision
+    if (head.x < 0 || head.x >= GRID_COLS || head.y < 0 || head.y >= GRID_ROWS) {
+        return 1;
     }
 
     // Check self collision
-    for (int i = 1; i < snake_length; i++) {
-        if (snake[0].x == snake[i].x && snake[0].y == snake[i].y) {
-            snake_dead = 1;
-            return;
+    for (int i = 1; i < snake->length; i++) {
+        if (head.x == snake->body[i].x && head.y == snake->body[i].y) {
+            return 1;
         }
     }
 
-    // Check apple collision
-    if (snake[0].x == apple.x && snake[0].y == apple.y) {
-        if (snake_length < MAX_SNAKE_LENGTH) {
-            snake_length++;
-        }
-        just_ate_apple = 1;
-        sound_apple_eaten();  //  Play sound
-        
-
-    }
-}
-void place_apple() {
-    srand(TIM14->CNT);  // Seed once
-    while (1) {
-        int valid = 1;
-        apple.x = random() % BOARD_WIDTH;
-        apple.y = random() % BOARD_HEIGHT;
-
-        // Ensure apple does not spawn on the snake
-        for (int i = 0; i < snake_length; i++) {
-            if (snake[i].x == apple.x && snake[i].y == apple.y) {
-                valid = 0;
-                break;
-            }
-        }
-
-        if (valid) break;
-    }
+    return 0;
 }
 
-void reset_game() {
-    snake_length = 3;
-    snake[0].x = 5; snake[0].y = 5;
-    snake[1].x = 4; snake[1].y = 5;
-    snake[2].x = 3; snake[2].y = 5;
-    direction = DIR_RIGHT;
+void reset_game(Snake *snake, Point *apple, int *score) {
+    *score = 0;
 
-    score = 0;
-    snake_dead = 0;
-    just_ate_apple = 0;
-    current_status = STATUS_PLAYING;
+    // Clear screen and show message
+    LCD_Clear(RED);
+    LCD_DrawString(70, 120, WHITE, RED, "YOU DIED", 2, 1);
+    nano_wait(1000000000); // 1 second delay
 
-    place_apple();          // Random apple location
-    update_display();       // Refresh visual state
-}
-void game_logic_loop() {
-    while (1) {
-        //game_setup();
-        update_display();
-        update_snake();
-        update_score();
-        drive_bb();  //updating the display
-
-        if (snake_dead) {
-            sound_death();  //Death sound
-        }
-
-        // Update game status color
-        if (snake_dead) {
-            current_status = STATUS_DEAD;
-        } else if (just_ate_apple) {
-            current_status = STATUS_EATING;
-        } else {
-            current_status = STATUS_PLAYING;
-        }
-
-        set_status_color(current_status);
-        update_display();
-
-        char key = get_key_event();
-        if (key == '*') {
-            reset_game();
-        }
-
-
-        nano_wait(1000);  // Adjust delay for game speed
-    }
+    *snake = init_snake();
+    *apple = spawn_random_apple();
+    draw_snake(snake);
+    draw_apple(apple->x, apple->y);
 }
 
 #include "stm32f0xx.h"
@@ -682,8 +599,10 @@ int main(void) {
     enable_ports();
     init_tim7();
     init_tim15();
+    //drive_bb();  
 
-    //idk
+
+
     setup_tim1();
     setup_audio_pwm();
 
@@ -702,14 +621,85 @@ int main(void) {
     msg[6] |= font[' '];
     msg[7] |= font['0'];
 
-   
+    LCD_Setup();
+    LCD_Clear(BG_COLOR);
+    srand(12345);
 
+    Point apple = spawn_random_apple();
+    Snake snake = init_snake();
+
+    int last_direction = snake.direction;
+    score = 0;
+    msg[6] |= font[' '];
+    msg[7] |= font['0'];
+    //game_logic_loop();
     while (1) {
+        
+        static char last_key = 0;
+        char key = get_key_event();
+        
+        if (key != last_key && key != 0) {
+            last_key = key;
+        
+            // handle direction (no reverse allowed)
+            if (key == '2' && snake.direction != DIR_DOWN)
+                snake.direction = DIR_UP;
+            else if (key == '4' && snake.direction != DIR_RIGHT)
+                snake.direction = DIR_LEFT;
+            else if (key == '5' && snake.direction != DIR_UP)
+                snake.direction = DIR_DOWN;
+            else if (key == '6' && snake.direction != DIR_LEFT)
+                snake.direction = DIR_RIGHT;
+        
+        } else if (key == 0) {
+            last_key = 0;  // reset last_key when no key is pressed
+        }
+        
+
+            if (key == '5' && last_direction != DIR_DOWN) {
+                snake.direction = DIR_UP;
+            } else if (key == '2' && last_direction != DIR_UP) {
+                snake.direction = DIR_DOWN;
+            } else if (key == '6' && last_direction != DIR_RIGHT) {
+                snake.direction = DIR_LEFT;
+            } else if (key == '4' && last_direction != DIR_LEFT) {
+                snake.direction = DIR_RIGHT;
+            }
+    
+            last_direction = snake.direction;
+    
+
+            int ate = move_snake(&snake, apple);
+            if (check_collision(&snake)) {
+                reset_game(&snake, &apple, &score);
+                continue;  // skip rest of loop this frame
+            }
+
+            if (ate) {
+                apple = spawn_random_apple();
+            }
+
+            score++;
+
+            int tens = (score / 10) % 10;
+            int ones = score % 10;
+        
+            msg[6] |= font[' ' + tens];  // Left digit
+            msg[7] |= font['0' + ones];  // Right digit
+        
+    
+            LCD_Clear(BG_COLOR);
+            draw_apple(apple.x, apple.y);
+            draw_snake(&snake);
+    
+            nano_wait(150000000); 
+        }
+        //Point apple = spawn_random_apple();
         //update_display();
         //game_setup();
-        game_logic_loop();
+        //game_logic_loop();
         //lcd_color_test();
-    }
+    
 
    /* 
    
