@@ -666,6 +666,9 @@ int main(void) {
 
     internal_clock();
 
+    //rgblight
+    setup_tim1();
+
     //keypad
     enable_ports();
     init_tim7();
@@ -742,13 +745,16 @@ int main(void) {
             int ate = move_snake(&snake, apple);
             if (check_collision(&snake)) {
                 sound_death();
+                setrgb(0x990000);
                 reset_game(&snake, &apple, &score);
                 continue;  // skip rest of loop this frame
             }
 
             if (ate) {
+                setrgb(0x000099);
                 apple = spawn_random_apple();
                 sound_apple_eaten();
+            
             
 
             score++;
@@ -759,6 +765,8 @@ int main(void) {
             msg[6] |= font['0' + tens];  // Left digit
             msg[7] |= font['0' + ones];  // Right digit
             //drive_bb();
+        } else {
+            setrgb(0x009900);
         }
     
             LCD_Clear(BG_COLOR);
