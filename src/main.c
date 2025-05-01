@@ -709,7 +709,7 @@ int main(void) {
     while (1) {
         
         static char last_key = 0;
-        char key = get_key_event();
+        char key = pop_queue();
         
         if (key != last_key && key != 0) {
             last_key = key;
