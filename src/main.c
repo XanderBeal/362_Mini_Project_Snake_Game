@@ -306,14 +306,12 @@ void setrgb(uint32_t rgbval) {
 
 //240 (horiz) x 320 (vert) pixel resolution
 void UI_Setup(u16 Color) {
-    // Target: a centered game area ~160×200 inside 240×320 screen
+    // Fill the full game playfield with the specified color
+    // e.g., 200x240 grid at 10px per cell = 20x30 playfield
 
-    // Outer boundary
-    LCD_DrawRectangle(40, 60, 200, 260, Color);  // (x1, y1) to (x2, y2)
-
-    // Inner boundary (nested inside)
-    LCD_DrawRectangle(45, 65, 195, 255, Color);  // 5-pixel margin inside
+    LCD_DrawFillRectangle(0, 0, 239, 319, Color);  // Full 240x320 screen
 }
+
 
 
 
@@ -336,9 +334,46 @@ void lcd_test(void){
 }
 
 
-void game_setup(){
-    //snake starting position and food starting position
+//Example logic: 
+//  https://www.youtube.com/watch?v=JcvyrU2A8r4&ab_channel=TFTSTM32
+//  Website:    https://vivonomicon.com/2018/06/17/drawing-to-a-small-tft-display-the-ili9341-and-stm32/
+//  Phils lab:  https://www.youtube.com/watch?v=RWujOLXBFrc&ab_channel=Phil%E2%80%99sLab
 
+#define MAX_SNAKE_LENGTH 100
+#define BOARD_WIDTH 20
+#define BOARD_HEIGHT 20
+#define DIR_UP 0
+#define DIR_RIGHT 1
+#define DIR_DOWN 2
+#define DIR_LEFT 3
+#define CELL_SIZE 10
+#define ORIGIN_X 20
+#define ORIGIN_Y 20
+#define SNAKE_COLOR GREEN
+#define APPLE_COLOR RED
+#define BG_COLOR BLUE
+#define CELL_SIZE   10
+#define GRID_COLS   16
+#define GRID_ROWS   20
+#define OFFSET_X    40
+#define OFFSET_Y    60
+
+
+typedef struct {
+    int x; // grid column (0 to 15)
+    int y; // grid row (0 to 19)
+} Point;
+
+Point apple;
+
+
+void game_setup(){
+    LCD_Setup();
+    //snake starting position and food starting position
+    LCD_Clear(GREEN);       // Set full screen background to green
+    UI_Setup(BLACK);        // Optional: black border on green background
+
+    //reset_game();           // Snake, apple, score, etc.
 }
 
 // For RGB Game Correlations
@@ -378,40 +413,15 @@ void set_status_color(GameStatus status) {
     }
 }
 
-//Example logic: 
-//  https://www.youtube.com/watch?v=JcvyrU2A8r4&ab_channel=TFTSTM32
-//  Website:    https://vivonomicon.com/2018/06/17/drawing-to-a-small-tft-display-the-ili9341-and-stm32/
-//  Phils lab:  https://www.youtube.com/watch?v=RWujOLXBFrc&ab_channel=Phil%E2%80%99sLab
-
-#define MAX_SNAKE_LENGTH 100
-#define BOARD_WIDTH 20
-#define BOARD_HEIGHT 20
-#define DIR_UP 0
-#define DIR_RIGHT 1
-#define DIR_DOWN 2
-#define DIR_LEFT 3
-#define CELL_SIZE 10
-#define ORIGIN_X 20
-#define ORIGIN_Y 20
-#define SNAKE_COLOR GREEN
-#define APPLE_COLOR RED
-#define BG_COLOR BLACK
-
 void place_apple(void);
 void LCD_DrawString(u16 x, u16 y, u16 fc, u16 bg, const char *p, u8 size, u8 mode);
 void LCD_DrawFillRectangle(u16 x, u16 y, u16 w, u16 h, u16 color);
 
 
-typedef struct {
-    int x;
-    int y;
-} Point;
 
 Point snake[MAX_SNAKE_LENGTH];
 int snake_length = 3;
 int direction = 0; // 0=up, 1=right, 2=down, 3=left
-
-Point apple = {10, 10};
 
 int just_ate_apple = 0;
 int snake_dead = 0;
@@ -434,6 +444,7 @@ void clear_board() {
 }
 void update_display() {
     // Clear board first (or just update old segments if optimized later)
+    LCD_Setup();
     clear_board();
 
     // Draw snake
@@ -475,6 +486,7 @@ void update_score() {
     }
 }
 void update_snake() {
+    LCD_Setup();
     just_ate_apple = 0;
 
     // Move body
@@ -511,25 +523,29 @@ void update_snake() {
         }
         just_ate_apple = 1;
         sound_apple_eaten();  //  Play sound
-        srand(TIM14->CNT);
-    apple.x = random() % BOARD_WIDTH;
-
-    srand(TIM14->CNT);
-    apple.y = random() % BOARD_HEIGHT;
-
+        
 
     }
 }
 void place_apple() {
-    srand(TIM14->CNT);
-    apple.x = random() % BOARD_WIDTH;
+    srand(TIM14->CNT);  // Seed once
+    while (1) {
+        int valid = 1;
+        apple.x = random() % BOARD_WIDTH;
+        apple.y = random() % BOARD_HEIGHT;
 
+        // Ensure apple does not spawn on the snake
+        for (int i = 0; i < snake_length; i++) {
+            if (snake[i].x == apple.x && snake[i].y == apple.y) {
+                valid = 0;
+                break;
+            }
+        }
 
-    srand(TIM14->CNT);
-    apple.y = random() % BOARD_HEIGHT;
-
-
+        if (valid) break;
+    }
 }
+
 void reset_game() {
     snake_length = 3;
     snake[0].x = 5; snake[0].y = 5;
@@ -547,9 +563,11 @@ void reset_game() {
 }
 void game_logic_loop() {
     while (1) {
+        //game_setup();
+        update_display();
         update_snake();
         update_score();
-        //drive_bb();  //updating the display
+        drive_bb();  //updating the display
 
         if (snake_dead) {
             sound_death();  //Death sound
@@ -594,13 +612,6 @@ void spi2_enable_dma(void);
 void game_logic_loop(void);
 void init_lcd_spi(void);
 
-void lcd_hello_world_test(void) {
-    LCD_Setup();
-    LCD_Clear(BLACK);
-
-    LCD_DrawString(20, 100, YELLOW, BLACK, "HELLO", 16, 0);
-    LCD_DrawString(20, 120, YELLOW, BLACK, "WORLD!", 16, 0);
-}
 void lcd_color_test(void) {
     LCD_Setup();
 
@@ -666,14 +677,42 @@ void init_spi1_slow(void) {
 int main(void) {
 
     internal_clock();
-    //lcd_hello_world_test();  // <-- Run test
 
+    //keypad
+    enable_ports();
+    init_tim7();
+    init_tim15();
+
+    //idk
+    setup_tim1();
+    setup_audio_pwm();
+
+    //7-bit display
+    init_spi2();
+    spi2_setup_dma();
+    spi2_enable_dma();
+    init_tim15();
+
+    msg[0] |= font['A'];
+    msg[1] |= font['P'];
+    msg[2] |= font['P'];
+    msg[3] |= font['L'];
+    msg[4] |= font['E'];
+    msg[5] |= font['S'];
+    msg[6] |= font[' '];
+    msg[7] |= font['0'];
+
+   
 
     while (1) {
-        lcd_color_test();
+        //update_display();
+        //game_setup();
+        game_logic_loop();
+        //lcd_color_test();
     }
+
    /* 
-    internal_clock();
+   
 
     //keypad
     enable_ports();
