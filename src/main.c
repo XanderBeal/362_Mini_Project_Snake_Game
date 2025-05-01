@@ -617,29 +617,22 @@ void lcd_color_test(void) {
 }
 
 void init_lcd_spi(void) {
-    //GPIOB clock 
+    //clock 
     RCC->AHBENR |= RCC_AHBENR_GPIOBEN;
-
-    GPIOB->MODER &= ~(GPIO_MODER_MODER8_Msk | GPIO_MODER_MODER11_Msk | GPIO_MODER_MODER14_Msk);
-    GPIOB->MODER |=  (GPIO_MODER_MODER8_0  | GPIO_MODER_MODER11_0  | GPIO_MODER_MODER14_0); // Output mode
-    
-    // Enable GPIOB and SPI1 clocks
-    RCC->AHBENR  |= RCC_AHBENR_GPIOBEN;
     RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
 
-    // Set PB3 (SCK), PB4 (MISO), PB5 (MOSI) to alternate function mode (AF0)
+    GPIOB->MODER &= ~(GPIO_MODER_MODER8_Msk | GPIO_MODER_MODER11_Msk | GPIO_MODER_MODER14_Msk);
+    GPIOB->MODER |=  (GPIO_MODER_MODER8_0  | GPIO_MODER_MODER11_0  | GPIO_MODER_MODER14_0);
+
+    //PB3 (SCK), PB4 (MISO), PB5 (MOSI) to alternate function mode (AF0)
     GPIOB->MODER &= ~(GPIO_MODER_MODER3_Msk | GPIO_MODER_MODER4_Msk | GPIO_MODER_MODER5_Msk);
     GPIOB->MODER |=  (GPIO_MODER_MODER3_1  | GPIO_MODER_MODER4_1  | GPIO_MODER_MODER5_1);
-
     GPIOB->AFR[0] &= ~(GPIO_AFRL_AFSEL3_Msk | GPIO_AFRL_AFSEL4_Msk | GPIO_AFRL_AFSEL5_Msk); // AF0
 
-    // Disable SPI before configuration
-    SPI1->CR1 &= ~SPI_CR1_SPE;
-
-    // Set slow baud rate (fPCLK/256), master mode, software NSS management
+    //Set slow baud rate 12Mhz, master mode, software NSS management
     SPI1->CR1 = SPI_CR1_MSTR | SPI_CR1_SSM | SPI_CR1_SSI | (SPI1->CR1 & ~SPI_CR1_BR_Msk) | (SPI_CR1_BR_0);
 
-    // Set 8-bit data size and FIFO reception threshold for 8-bit
+    //Set 8-bit data size and FIFO reception threshold for 8-bit
     SPI1->CR2 = SPI_CR2_FRXTH | (7 << SPI_CR2_DS_Pos); // DS = 7 for 8-bit
 
     //enable SPI
@@ -647,26 +640,26 @@ void init_lcd_spi(void) {
 }
 
 void init_spi1_slow(void) {
-    // Enable GPIOB and SPI1 clocks
+    //Enable GPIOB and SPI1 clocks
     RCC->AHBENR  |= RCC_AHBENR_GPIOBEN;
     RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
 
-    // Set PB3 (SCK), PB4 (MISO), PB5 (MOSI) to alternate function mode (AF0)
+    //Set PB3 (SCK), PB4 (MISO), PB5 (MOSI) to alternate function mode (AF0)
     GPIOB->MODER &= ~(GPIO_MODER_MODER3_Msk | GPIO_MODER_MODER4_Msk | GPIO_MODER_MODER5_Msk);
     GPIOB->MODER |=  (GPIO_MODER_MODER3_1  | GPIO_MODER_MODER4_1  | GPIO_MODER_MODER5_1);
 
     GPIOB->AFR[0] &= ~(GPIO_AFRL_AFSEL3_Msk | GPIO_AFRL_AFSEL4_Msk | GPIO_AFRL_AFSEL5_Msk); // AF0
 
-    // Disable SPI before configuration
+    //Disable SPI before configuration
     SPI1->CR1 &= ~SPI_CR1_SPE;
 
-    // Set slow baud rate (fPCLK/256), master mode, software NSS management
+    //Set slow baud rate (fPCLK/256), master mode, software NSS management
     SPI1->CR1 = SPI_CR1_MSTR | SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_BR_Msk;
 
-    // Set 8-bit data size and FIFO reception threshold for 8-bit
+    //Set 8-bit data size and FIFO reception threshold for 8-bit
     SPI1->CR2 = SPI_CR2_FRXTH | (7 << SPI_CR2_DS_Pos); // DS = 7 for 8-bit
 
-    // Enable SPI
+    //Enable SPI
     SPI1->CR1 |= SPI_CR1_SPE;
 }
 
