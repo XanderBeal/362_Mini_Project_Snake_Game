@@ -555,27 +555,27 @@ void reset_game(Snake *snake, Point *apple, int *score) {
     // Clear screen and show message
     LCD_Clear(RED);
 
-    msg[0] = font['Y'];
-    msg[1] = font['O'];
-    msg[2] = font['U'];
-    msg[3] = font[' '];
-    msg[4] = font['D'];
-    msg[5] = font['I'];
-    msg[6] = font['E'];
-    msg[7] = font['D'];
+    msg[0] = (0 << 8) | font['Y'];
+    msg[1] = (1 << 8) | font['O'];
+    msg[2] = (2 << 8) | font['U'];
+    msg[3] = (3 << 8) | font[' '];
+    msg[4] = (4 << 8) | font['D'];
+    msg[5] = (5 << 8) | font['I'];
+    msg[6] = (6 << 8) | font['E'];
+    msg[7] = (7 << 8) | font['D'];
  
     
     nano_wait(1000000000); // 1 second delay
     
 
-    msg[0] = font['A'];
-    msg[1] = font['P'];
-    msg[2] = font['P'];
-    msg[3] = font['L'];
-    msg[4] = font['E'];
-    msg[5] = font['S'];
-    msg[6] = font[' '];
-    msg[7] = font['0'];
+    msg[0] = (0 << 8) | font['A'];
+    msg[1] = (1 << 8) | font['P'];
+    msg[2] = (2 << 8) | font['P'];
+    msg[3] = (3 << 8) | font['L'];
+    msg[4] = (4 << 8) | font['E'];
+    msg[5] = (5 << 8) | font['S'];
+    msg[6] = (6 << 8) | font[' '];  // space before the score
+    msg[7] = (7 << 8) | font['0'];
 
     *snake = init_snake();
     *apple = spawn_random_apple();
@@ -761,9 +761,8 @@ int main(void) {
 
             int tens = (score / 10) % 10;
             int ones = score % 10;
-        
-            msg[6] |= font['0' + tens];  // Left digit
-            msg[7] |= font['0' + ones];  // Right digit
+            msg[6] = (6 << 8) | font['0' + tens];
+            msg[7] = (7 << 8) | font['0' + ones];
             //drive_bb();
         } else {
             setrgb(0x009900);
