@@ -353,10 +353,10 @@ void lcd_test(void){
 #define APPLE_COLOR RED
 #define BG_COLOR GREEN
 #define CELL_SIZE   10
-#define GRID_COLS   16
-#define GRID_ROWS   20
-#define OFFSET_X    40
-#define OFFSET_Y    60
+#define GRID_COLS   24
+#define GRID_ROWS   32
+#define OFFSET_X    0
+#define OFFSET_Y    0
 
 
 
@@ -385,8 +385,8 @@ typedef struct {
 
 Point spawn_random_apple(void) {
     Point apple;
-    apple.x = rand() % GRID_COLS;
-    apple.y = rand() % GRID_ROWS;
+    apple.x = (rand() % (GRID_COLS / 2)) * 2;  // even columns only
+    apple.y = (rand() % (GRID_ROWS / 2)) * 2;  // even rows only
     draw_apple(apple.x, apple.y);
     return apple;
 }
@@ -500,11 +500,33 @@ int check_collision(const Snake *snake) {
 
 void reset_game(Snake *snake, Point *apple, int *score) {
     *score = 0;
+    //LCD_Setup();  // Reinitialize display controller
+
 
     // Clear screen and show message
     LCD_Clear(RED);
-    LCD_DrawString(70, 120, WHITE, RED, "YOU DIED", 2, 1);
+
+    msg[0] = font['Y'];
+    msg[1] = font['O'];
+    msg[2] = font['U'];
+    msg[3] = font[' '];
+    msg[4] = font['D'];
+    msg[5] = font['I'];
+    msg[6] = font['E'];
+    msg[7] = font['D'];
+ 
+    
     nano_wait(1000000000); // 1 second delay
+    
+
+    msg[0] = font['A'];
+    msg[1] = font['P'];
+    msg[2] = font['P'];
+    msg[3] = font['L'];
+    msg[4] = font['E'];
+    msg[5] = font['S'];
+    msg[6] = font[' '];
+    msg[7] = font['0'];
 
     *snake = init_snake();
     *apple = spawn_random_apple();
@@ -598,8 +620,7 @@ int main(void) {
     //keypad
     enable_ports();
     init_tim7();
-    init_tim15();
-    //drive_bb();  
+    init_tim15(); 
 
 
 
@@ -677,16 +698,17 @@ int main(void) {
 
             if (ate) {
                 apple = spawn_random_apple();
-            }
+            
 
             score++;
 
             int tens = (score / 10) % 10;
             int ones = score % 10;
         
-            msg[6] |= font[' ' + tens];  // Left digit
+            msg[6] |= font['0' + tens];  // Left digit
             msg[7] |= font['0' + ones];  // Right digit
-        
+            //drive_bb();
+        }
     
             LCD_Clear(BG_COLOR);
             draw_apple(apple.x, apple.y);
