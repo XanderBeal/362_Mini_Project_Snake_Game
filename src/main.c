@@ -761,8 +761,13 @@ int main(void) {
 
             int tens = (score / 10) % 10;
             int ones = score % 10;
-            msg[6] = (6 << 8) | font['0' + tens];
-            msg[7] = (7 << 8) | font['0' + ones];
+
+            if (score < 10)
+                msg[6] = (6 << 8) | font[' '];           // blank space
+            else
+                msg[6] = (6 << 8) | font['0' + tens];    // actual digit
+
+            msg[7] = (7 << 8) | font['0' + ones];        // always show ones place
             //drive_bb();
         } else {
             setrgb(0x009900);
